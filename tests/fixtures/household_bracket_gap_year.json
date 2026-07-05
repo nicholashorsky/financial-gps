@@ -1,0 +1,43 @@
+{
+  "primary": {
+    "name": "Morgan",
+    "date_of_birth": "1975-09-01",
+    "province": "ON",
+    "years_in_canada_post_18": 35
+  },
+  "annual_spending": 60000,
+  "spending_inflation": 0.025,
+  "start_year": 2026,
+  "income_sources": [
+    {
+      "source_type": "employment",
+      "annual_amount": 120000,
+      "income_character": "employment",
+      "start_year": 2026,
+      "inflation_rate": 0.0,
+      "is_pensionable": true
+    }
+  ],
+  "accounts": [
+    {
+      "account_type": "rrsp",
+      "current_balance": 100000,
+      "annual_return": 0.04
+    },
+    {
+      "account_type": "tfsa",
+      "current_balance": 25000,
+      "annual_return": 0.05
+    }
+  ],
+  "benefits": [
+    {
+      "benefit_type": "CPP",
+      "elected_start_age": 65
+    },
+    {
+      "benefit_type": "OAS",
+      "elected_start_age": 67
+    }
+  ]
+}

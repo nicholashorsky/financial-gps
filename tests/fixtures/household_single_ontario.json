@@ -1,0 +1,43 @@
+{
+  "primary": {
+    "name": "Alex",
+    "date_of_birth": "1985-06-15",
+    "province": "ON",
+    "years_in_canada_post_18": 40
+  },
+  "annual_spending": 55000,
+  "spending_inflation": 0.025,
+  "start_year": 2026,
+  "income_sources": [
+    {
+      "source_type": "employment",
+      "annual_amount": 95000,
+      "income_character": "employment",
+      "start_year": 2026,
+      "inflation_rate": 0.02,
+      "is_pensionable": true
+    }
+  ],
+  "accounts": [
+    {
+      "account_type": "tfsa",
+      "current_balance": 50000,
+      "annual_return": 0.05
+    },
+    {
+      "account_type": "taxable",
+      "current_balance": 35000,
+      "annual_return": 0.04
+    }
+  ],
+  "benefits": [
+    {
+      "benefit_type": "CPP",
+      "elected_start_age": 65
+    },
+    {
+      "benefit_type": "OAS",
+      "elected_start_age": 65
+    }
+  ]
+}

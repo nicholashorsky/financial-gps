@@ -1,0 +1,25 @@
+{
+  "primary": {
+    "name": "Jamie",
+    "date_of_birth": "1959-02-10",
+    "province": "ON",
+    "years_in_canada_post_18": 40
+  },
+  "annual_spending": 18000,
+  "spending_inflation": 0.02,
+  "start_year": 2026,
+  "income_sources": [],
+  "accounts": [
+    {
+      "account_type": "hisa",
+      "current_balance": 12000,
+      "annual_return": 0.02
+    }
+  ],
+  "benefits": [
+    {
+      "benefit_type": "OAS",
+      "elected_start_age": 65
+    }
+  ]
+}
