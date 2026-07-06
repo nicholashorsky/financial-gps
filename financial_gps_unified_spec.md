@@ -7,6 +7,20 @@
 
 ---
 
+## 0. Current Build State
+
+**Current phase:** Phase 8 — Beta Hardening + Deployment Validation
+
+**MVP Complete:** Phases 0-7 are functionally implemented enough for deployed testing.
+
+**Beta Ready:** The app is beta-ready when a fresh deployed Streamlit app can register a user, import the checked-in sample CSV, load every sidebar page without a red Streamlit error, and preserve imported data across normal page refreshes.
+
+**Public Test Ready:** The app is public-test-ready only after the beta smoke path passes and the storage decision is explicit: either accept SQLite as demo-only persistence or migrate to PostgreSQL/Supabase for shared multi-user testing.
+
+**Current beta constraint:** SQLite is acceptable for local development and lightweight demos. It is not the long-term persistence layer for shared public testing.
+
+---
+
 ## 1. Product Understanding
 
 Financial GPS is a humorous financial decision simulator for Canadian professionals aged 25–45. It combines a transaction-based budget tracker (CSV import, categorization, spending dashboards) with a Canadian FIRE planning engine (TFSA/RRSP/FHSA room tracking, CPP/OAS modeling, Ontario tax, decumulation sequencing) in a single unified app.
@@ -214,6 +228,9 @@ name            TEXT          -- "RBC Chequing", "Visa Infinite"
 type            TEXT          -- chequing | savings | credit | investment
 balance         REAL
 is_imported     BOOLEAN
+account_key     TEXT          -- stable parser key, e.g. chequing:9135
+account_number_hint TEXT      -- masked display hint
+last_imported_at DATETIME
 created_at      DATETIME
 ```
 
@@ -235,6 +252,8 @@ split_group_id      INTEGER FK → split_groups
 cash_offset_id      INTEGER FK → cash_offsets
 source              TEXT              -- csv_import | manual
 raw_description     TEXT
+import_hash         TEXT              -- unique import dedupe hash
+created_at          DATETIME
 ```
 
 #### `category_rules`
@@ -889,6 +908,7 @@ financial_gps/
 
 > Follows `vibe_coding_prompt.md` phasing: Foundation → Data In → Services → UI.
 > L1 gate rule: no Streamlit page is written until the L1 engine passes all regression tests.
+> Build-state note: the unchecked boxes below describe planned scope. Current completion status is summarized in "0. Current Build State" and should be updated at release gates.
 
 ### Phase 0 — Foundation (Day 1–2)
 - [ ] Repo init + `requirements.txt` (streamlit, pandas, plotly, streamlit-authenticator, bcrypt)
@@ -971,6 +991,23 @@ financial_gps/
 - [ ] Tighten deployment hygiene: secrets ignored, sample data documented, SQLite limitations clear
 - [ ] Run deployed-app beta path with a fresh account before inviting testers
 - [ ] Generate additional synthetic CSVs from the sample structure when new edge cases appear
+
+#### Phase 8 Acceptance Criteria
+- [ ] `csv samples/RBC SAMPLE CSV.csv` imports 100+ transactions in a fresh account
+- [ ] Import creates four accounts from the sample: chequing, savings, Mastercard, and Visa
+- [ ] Credit card payments/transfers are matched and excluded from spending totals
+- [ ] Home, Spending, Forecast, Goals, FIRE Profile, FIRE Forecast, Data Quality, and Settings load after import
+- [ ] FIRE bridge creates at least one income default and one spending baseline from sample data
+- [ ] Unit tests, sample CSV regression test, and smoke test pass locally before pushing
+- [ ] Streamlit Community Cloud deploys from `main` without a startup error
+- [ ] README explains the sample-data beta path and SQLite limitations
+
+#### Beta Limitations
+- SQLite persistence is demo-only for deployed shared testing; PostgreSQL/Supabase is required before serious public beta.
+- The app currently models Ontario tax assumptions first; other provinces are roadmap work.
+- No open banking integration exists; all transaction data comes from CSV import or manual entry.
+- CRA, Service Canada, and account room values must be manually verified by the user.
+- Sample CSVs are for product validation and should be used before testers upload real bank exports.
 
 ### Minimum Shippable State
 A single Ontario-resident user can:
