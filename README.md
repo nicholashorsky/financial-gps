@@ -18,6 +18,26 @@ streamlit run app.py
 
 Open [http://localhost:8501](http://localhost:8501), register an account, and explore the sidebar navigation.
 
+## Development Test Login
+
+For beta testing, you can enable a login shortcut that creates/uses `test@financialgps.local`.
+
+Local PowerShell:
+
+```powershell
+$env:FINANCIAL_GPS_TEST_LOGIN="1"
+streamlit run app.py
+```
+
+Streamlit Community Cloud secrets:
+
+```toml
+[dev]
+allow_test_login = true
+```
+
+Do not enable this shortcut for a real public test with personal financial data.
+
 ## Project Structure
 
 ```

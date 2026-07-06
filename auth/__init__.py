@@ -74,3 +74,30 @@ def update_user_profile(user_id: int, *, name: str | None = None) -> dict | None
         return row_to_dict(row)
     finally:
         conn.close()
+
+
+def get_or_create_test_user() -> dict:
+    email = "test@financialgps.local"
+    password = "test-password-not-for-production"
+    existing = get_user_by_email(email)
+    if existing:
+        return existing
+    user = create_user(email, password, "Beta Tester")
+    if user is None:
+        existing = get_user_by_email(email)
+        if existing:
+            return existing
+        raise RuntimeError("Could not create test user.")
+    return user
+
+
+def get_user_by_email(email: str) -> dict | None:
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, email, name, created_at FROM users WHERE email = ?",
+            (email.lower().strip(),),
+        ).fetchone()
+        return row_to_dict(row)
+    finally:
+        conn.close()
