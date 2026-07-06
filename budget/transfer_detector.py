@@ -16,6 +16,7 @@ CC_PAYMENT_PATTERNS_OUT = (
     r"bill payment.*visa",
     r"bill payment.*mastercard",
     r"paiement.*visa",
+    r"www transfer",
 )
 
 CC_PAYMENT_PATTERNS_IN = (

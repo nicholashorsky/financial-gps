@@ -965,6 +965,13 @@ financial_gps/
 - [ ] Settings page: profile + tax assumptions + FIRE assumptions
 - [ ] README + deploy docs
 
+### Phase 8 — Beta Hardening + Deployment Validation
+- [ ] Use checked-in sample CSVs for repeatable Streamlit smoke testing
+- [ ] Add regression coverage for sample CSV parsing, import, transfer matching, dashboard totals, and bridge sync
+- [ ] Tighten deployment hygiene: secrets ignored, sample data documented, SQLite limitations clear
+- [ ] Run deployed-app beta path with a fresh account before inviting testers
+- [ ] Generate additional synthetic CSVs from the sample structure when new edge cases appear
+
 ### Minimum Shippable State
 A single Ontario-resident user can:
 1. Register and log in

@@ -32,6 +32,20 @@ financial_gps/
 └── tests/
 ```
 
+## Beta Test With Sample Data
+
+The repo includes a realistic RBC multi-account sample at `csv samples/RBC SAMPLE CSV.csv`.
+
+Suggested beta smoke path:
+
+1. Register a fresh test account
+2. Open Spending
+3. Upload `csv samples/RBC SAMPLE CSV.csv`
+4. Import transactions
+5. Check Home, Spending, Forecast, Goals, FIRE Profile, FIRE Forecast, and Data Quality
+
+The sample is synthetic test data for product validation. Use it before asking testers to upload personal bank exports.
+
 ## Deploy to Streamlit Community Cloud
 
 1. Push this repo to GitHub
@@ -53,6 +67,6 @@ financial_gps/
 - Sidebar navigation skeleton
 - CRA 2026 parameters + loader
 
-**Current:** Phase 7 — Onboarding, polish, settings expansion, and deploy-readiness cleanup
+**Current:** Phase 8 — Beta hardening, sample-data smoke tests, and deployment validation
 
 See `financial_gps_unified_spec.md` for the full product spec and build plan.
