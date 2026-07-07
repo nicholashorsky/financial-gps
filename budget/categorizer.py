@@ -238,7 +238,7 @@ def categorize_description(
             return rule.category, txn_type
 
     txn_type = "income" if amount > 0 else "expense"
-    return "Other", txn_type
+    return "Uncategorized", txn_type
 
 
 def categorize_transactions(

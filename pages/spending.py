@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date
+import re
 from typing import Iterable
 
 import pandas as pd
@@ -15,6 +16,10 @@ from budget.csv_parser import parse_csv, preview_csv
 from budget.importer import get_spending_summary, import_csv_transactions
 from budget.narrator import csv_sync_message, spending_message
 from shared.db import get_connection
+
+
+UNREVIEWED_SQL = "COALESCE(category, 'Uncategorized') IN ('', 'Uncategorized')"
+UNREVIEWED_TXN_SQL = "COALESCE(t.category, 'Uncategorized') IN ('', 'Uncategorized')"
 
 
 def _guess_column(columns: Iterable[str], candidates: list[str]) -> str | None:
@@ -110,9 +115,11 @@ def _accounts_frame(conn, user_id: int) -> pd.DataFrame:
             a.type,
             a.account_number_hint,
             a.last_imported_at,
+            MAX(t.date) AS last_transaction_date,
             COUNT(t.id) AS transaction_count,
             COALESCE(SUM(CASE WHEN t.amount > 0 AND t.is_excluded = 0 THEN t.amount ELSE 0 END), 0) AS income,
-            COALESCE(SUM(CASE WHEN t.amount < 0 AND t.is_excluded = 0 THEN ABS(t.amount) ELSE 0 END), 0) AS spending
+            COALESCE(SUM(CASE WHEN t.amount < 0 AND t.is_excluded = 0 THEN ABS(t.amount) ELSE 0 END), 0) AS spending,
+            COALESCE(SUM(CASE WHEN t.is_excluded = 0 THEN t.amount ELSE 0 END), 0) AS net_flow
         FROM accounts a
         LEFT JOIN transactions t ON t.account_id = a.id
         WHERE a.user_id = ?
@@ -124,14 +131,51 @@ def _accounts_frame(conn, user_id: int) -> pd.DataFrame:
     return pd.DataFrame([dict(row) for row in rows])
 
 
-def _review_transactions(conn, user_id: int, category_filter: str = "Needs review", limit: int = 50) -> list[dict]:
+def _spending_workbench_stats(conn, user_id: int) -> dict[str, float | int]:
+    start, end = _current_month_range()
+    row = conn.execute(
+        f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND date >= ? AND date < ? THEN amount ELSE 0 END), 0) AS month_income,
+            COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND date >= ? AND date < ? THEN ABS(amount) ELSE 0 END), 0) AS month_spending,
+            COALESCE(SUM(CASE WHEN is_excluded = 0 AND date >= ? AND date < ? THEN amount ELSE 0 END), 0) AS month_net,
+            SUM(CASE WHEN source = 'csv_import' AND {UNREVIEWED_SQL} THEN 1 ELSE 0 END) AS review_count,
+            SUM(CASE WHEN is_excluded = 1 THEN 1 ELSE 0 END) AS excluded_count
+        FROM transactions
+        WHERE user_id = ?
+        """,
+        (start, end, start, end, start, end, user_id),
+    ).fetchone()
+    return {
+        "month_income": float(row["month_income"] or 0),
+        "month_spending": float(row["month_spending"] or 0),
+        "month_net": float(row["month_net"] or 0),
+        "review_count": int(row["review_count"] or 0),
+        "excluded_count": int(row["excluded_count"] or 0),
+    }
+
+
+def _review_transactions(
+    conn,
+    user_id: int,
+    category_filter: str = "Needs review",
+    account_id: int | None = None,
+    search: str = "",
+    limit: int = 50,
+) -> list[dict]:
     where = "t.user_id = ? AND t.source = 'csv_import'"
     params: list[object] = [user_id]
     if category_filter == "Needs review":
-        where += " AND COALESCE(t.category, 'Other') = 'Other'"
+        where += f" AND {UNREVIEWED_TXN_SQL}"
     elif category_filter != "All":
         where += " AND t.category = ?"
         params.append(category_filter)
+    if account_id is not None:
+        where += " AND t.account_id = ?"
+        params.append(account_id)
+    if search.strip():
+        where += " AND lower(t.description) LIKE ?"
+        params.append(f"%{search.strip().lower()}%")
 
     rows = conn.execute(
         f"""
@@ -140,7 +184,7 @@ def _review_transactions(conn, user_id: int, category_filter: str = "Needs revie
             t.date,
             t.description,
             t.amount,
-            COALESCE(t.category, 'Other') AS category,
+            COALESCE(t.category, 'Uncategorized') AS category,
             t.transaction_type,
             t.is_excluded,
             a.name AS account_name
@@ -155,9 +199,55 @@ def _review_transactions(conn, user_id: int, category_filter: str = "Needs revie
     return [dict(row) for row in rows]
 
 
+def _format_money(value: float) -> str:
+    sign = "-" if value < 0 else ""
+    return f"{sign}${abs(value):,.2f}"
+
+
 def _keyword_hint(description: str) -> str:
     words = [part for part in description.lower().replace("*", " ").replace("#", " ").split() if len(part) > 2]
     return " ".join(words[:2]) if words else description.lower()[:24]
+
+
+def _rule_keyword_from_description(description: str) -> str:
+    normalized = re.sub(r"[^a-z0-9 ]+", " ", description.lower())
+    normalized = re.sub(r"\b\d+\b", " ", normalized)
+    tokens = [
+        token
+        for token in normalized.split()
+        if len(token) > 2 and token not in {"the", "and", "inc", "ltd", "canada", "guelph", "toronto", "online"}
+    ]
+    if not tokens:
+        return _keyword_hint(description)
+    if tokens[0] in {"amzn", "amazon", "amazonca"}:
+        return "amazon"
+    if len(tokens) >= 2 and tokens[0] == "wal" and tokens[1] == "mart":
+        return "wal mart"
+    if tokens[0] == "walmart":
+        return "walmart"
+    return " ".join(tokens[:2])
+
+
+def _suggest_rule_patterns(transactions: list[dict], limit: int = 5) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, object]] = {}
+    for txn in transactions:
+        keyword = _rule_keyword_from_description(txn["description"] or "")
+        if not keyword:
+            continue
+        item = grouped.setdefault(
+            keyword,
+            {
+                "keyword": keyword,
+                "count": 0,
+                "total": 0.0,
+                "example": txn["description"] or "",
+            },
+        )
+        item["count"] = int(item["count"]) + 1
+        item["total"] = float(item["total"]) + abs(float(txn["amount"] or 0))
+
+    suggestions = [item for item in grouped.values() if int(item["count"]) >= 2]
+    return sorted(suggestions, key=lambda item: (int(item["count"]), float(item["total"])), reverse=True)[:limit]
 
 
 def _apply_category(conn, user_id: int, transaction_id: int, category: str) -> None:
@@ -192,12 +282,12 @@ def _create_rule_from_review(
         return
     like = f"%{keyword.strip().lower()}%"
     rows = conn.execute(
-        """
+        f"""
         SELECT id, description, amount
         FROM transactions
         WHERE user_id = ?
           AND lower(description) LIKE ?
-          AND COALESCE(category, 'Other') = 'Other'
+          AND {UNREVIEWED_SQL}
         """,
         (user_id, like),
     ).fetchall()
@@ -209,6 +299,16 @@ def _create_rule_from_review(
         )
     conn.commit()
     st.session_state.last_rule_created = rule_id
+
+
+def _skip_review_transaction(transaction_id: int) -> None:
+    skipped = set(st.session_state.get("spending_review_skipped", set()))
+    skipped.add(transaction_id)
+    st.session_state.spending_review_skipped = skipped
+
+
+def _clear_review_skips() -> None:
+    st.session_state.spending_review_skipped = set()
 
 
 def _render_metrics(summary) -> None:
@@ -271,6 +371,98 @@ def _render_recent_transactions(summary) -> None:
             }
         )
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _render_workbench_header(conn, user_id: int, summary) -> None:
+    stats = _spending_workbench_stats(conn, user_id)
+    review_count = int(stats["review_count"])
+    if review_count > 0:
+        st.warning(f"Review uncategorized transactions: {review_count} remaining")
+    else:
+        top_category = summary.spending_by_category[0]["category"] if summary.spending_by_category else None
+        st.info(spending_message(summary.spending_total, top_category))
+
+    cols = st.columns(4)
+    cols[0].metric("This month in", _format_money(float(stats["month_income"])))
+    cols[1].metric("This month out", _format_money(float(stats["month_spending"])))
+    cols[2].metric("Net flow", _format_money(float(stats["month_net"])))
+    cols[3].metric("Tracked accounts", summary.account_count)
+
+
+def _render_review_banner(stats: dict[str, float | int]) -> None:
+    review_count = int(stats["review_count"])
+    if review_count > 0:
+        st.error(f"Let's review some transactions\n\n{review_count} remaining")
+        st.caption("Open the Transactions tab to categorize them or create rules.")
+        return
+    st.success("Transaction review is clear. The numbers are allowed to be smug for a moment.")
+
+
+def _render_recent_transaction_list(conn, user_id: int, limit: int = 8) -> None:
+    rows = conn.execute(
+        """
+        SELECT t.date, t.description, t.amount, COALESCE(t.category, 'Other') AS category, a.name AS account_name
+        FROM transactions t
+        LEFT JOIN accounts a ON a.id = t.account_id
+        WHERE t.user_id = ? AND t.is_excluded = 0
+        ORDER BY t.date DESC, t.id DESC
+        LIMIT ?
+        """,
+        (user_id, limit),
+    ).fetchall()
+    if not rows:
+        st.info("Recent transactions will appear after the first import.")
+        return
+
+    for row in rows:
+        amount = float(row["amount"] or 0)
+        cols = st.columns([0.45, 2.2, 1, 1])
+        cols[0].caption(row["date"])
+        cols[1].write(row["description"] or "Transaction")
+        cols[2].caption(row["category"])
+        cols[3].write(_format_money(amount))
+
+
+def _render_top_accounts(accounts: pd.DataFrame, limit: int = 4) -> None:
+    if accounts.empty:
+        st.info("Accounts will appear here after the first import.")
+        return
+    top_accounts = accounts.sort_values("transaction_count", ascending=False).head(limit)
+    for _, row in top_accounts.iterrows():
+        cols = st.columns([1.6, 0.8, 0.8])
+        cols[0].write(row["name"])
+        cols[1].caption(str(row["type"]).title())
+        cols[2].write(_format_money(float(row["net_flow"] or 0)))
+
+
+def _render_category_snapshot(summary, limit: int = 5) -> None:
+    if not summary.spending_by_category:
+        st.info("Category totals will appear after imports are categorized.")
+        return
+    rows = []
+    for row in summary.spending_by_category[:limit]:
+        rows.append({"Category": row["category"] or "Other", "Spending": _format_money(float(row["total"] or 0))})
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _render_overview_section(conn, user_id: int, summary) -> None:
+    stats = _spending_workbench_stats(conn, user_id)
+    accounts = _accounts_frame(conn, user_id)
+
+    _render_review_banner(stats)
+
+    st.divider()
+    left, right = st.columns([1, 1])
+    with left:
+        st.subheader("Top Accounts")
+        _render_top_accounts(accounts)
+    with right:
+        st.subheader("Spending Snapshot")
+        _render_category_snapshot(summary)
+
+    st.divider()
+    st.subheader("Transactions")
+    _render_recent_transaction_list(conn, user_id)
 
 
 def _render_import_section(conn, user_id: int, summary) -> object:
@@ -375,15 +567,33 @@ def _render_accounts_section(conn, user_id: int) -> None:
         st.info("No accounts are being tracked yet. Import a CSV to create account records.")
         return
 
+    type_labels = {
+        "chequing": "Cash",
+        "savings": "Savings",
+        "credit": "Credit Cards",
+        "investment": "Investments",
+    }
+    groups = accounts.groupby("type", sort=True)
+    group_cols = st.columns(min(len(groups), 4) or 1)
+    for col, (account_type, group) in zip(group_cols, groups, strict=False):
+        with col:
+            label = type_labels.get(str(account_type), str(account_type).title())
+            st.markdown(f"**{label}**")
+            st.metric("Net flow", _format_money(float(group["net_flow"].sum())))
+            st.caption(f"{int(group['transaction_count'].sum())} transaction(s)")
+
+    st.divider()
     display = accounts.drop(columns=["id"]).rename(
         columns={
             "name": "Account",
             "type": "Type",
             "account_number_hint": "Hint",
             "last_imported_at": "Last import",
+            "last_transaction_date": "Last transaction",
             "transaction_count": "Transactions",
             "income": "Income",
             "spending": "Spending",
+            "net_flow": "Net flow",
         }
     )
     st.dataframe(display, use_container_width=True, hide_index=True)
@@ -404,14 +614,39 @@ def _render_accounts_section(conn, user_id: int) -> None:
 
 
 def _render_transaction_review(conn, user_id: int) -> None:
-    st.subheader("Imported Transaction Review")
-    st.caption("Review imported rows that landed in Other, then categorize them or turn a recurring description into a rule.")
+    st.subheader("Transaction Review")
+    st.caption("A cleanup queue for imported rows, inspired by the kind of review flow personal finance apps make you wish banks had built first.")
 
     filter_options = ["Needs review", "All", *CATEGORIES]
-    filter_choice = st.selectbox("Review filter", filter_options, index=0)
-    transactions = _review_transactions(conn, user_id, filter_choice)
+    accounts = _accounts_frame(conn, user_id)
+    account_options = {"All accounts": None}
+    if not accounts.empty:
+        account_options.update({str(row["name"]): int(row["id"]) for _, row in accounts.iterrows()})
+
+    filter_col, account_col, search_col = st.columns([1, 1, 1.4])
+    filter_choice = filter_col.selectbox("Review filter", filter_options, index=0)
+    account_choice = account_col.selectbox("Account", list(account_options.keys()))
+    search = search_col.text_input("Search descriptions")
+
+    transactions = _review_transactions(
+        conn,
+        user_id,
+        filter_choice,
+        account_id=account_options[account_choice],
+        search=search,
+    )
     if not transactions:
         st.success("No imported transactions need review for this filter.")
+        return
+
+    review_mode = st.segmented_control(
+        "Review mode",
+        ["Quick review", "Detailed list"],
+        default="Quick review",
+        key="transaction_review_mode",
+    )
+    if review_mode == "Quick review":
+        _render_quick_review(conn, user_id, transactions)
         return
 
     st.caption(f"Showing {len(transactions)} imported transaction(s).")
@@ -462,6 +697,118 @@ def _render_transaction_review(conn, user_id: int) -> None:
                     st.rerun()
 
 
+def _render_quick_review(conn, user_id: int, transactions: list[dict]) -> None:
+    skipped = set(st.session_state.get("spending_review_skipped", set()))
+    queue = [txn for txn in transactions if int(txn["id"]) not in skipped]
+    suggestions = _suggest_rule_patterns(queue)
+
+    top_cols = st.columns([1, 1, 1])
+    top_cols[0].metric("In this queue", len(queue))
+    top_cols[1].metric("Skipped", len(skipped))
+    if top_cols[2].button("Reset skips", use_container_width=True, disabled=not skipped):
+        _clear_review_skips()
+        st.rerun()
+
+    if not queue:
+        st.success("No more transactions in this quick review queue.")
+        return
+
+    if suggestions:
+        st.markdown("**Suggested rules**")
+        for suggestion in suggestions:
+            with st.container(border=True):
+                cols = st.columns([1.3, 0.7, 0.9, 1.1])
+                keyword = str(suggestion["keyword"])
+                cols[0].write(keyword)
+                cols[1].caption(f"{int(suggestion['count'])} matches")
+                cols[2].caption(_format_money(float(suggestion["total"])))
+                selected_category = cols[3].selectbox(
+                    "Category",
+                    CATEGORIES,
+                    index=CATEGORIES.index("Shopping") if "Shopping" in CATEGORIES else 0,
+                    key=f"suggested_rule_category_{keyword}",
+                    label_visibility="collapsed",
+                )
+                st.caption(f"Example: {suggestion['example']}")
+                if st.button(
+                    f"Create rule for '{keyword}'",
+                    key=f"suggested_rule_{keyword}",
+                    use_container_width=True,
+                ):
+                    _create_rule_from_review(
+                        conn,
+                        user_id,
+                        keyword,
+                        selected_category,
+                        apply_existing=True,
+                    )
+                    st.rerun()
+
+        st.divider()
+
+    txn = queue[0]
+    amount = float(txn["amount"] or 0)
+    with st.container(border=True):
+        st.caption(f"{txn['date']} | {txn.get('account_name') or 'Unassigned account'}")
+        st.subheader(txn["description"] or "Imported transaction")
+        cols = st.columns(3)
+        cols[0].metric("Amount", _format_money(amount))
+        cols[1].metric("Current", txn["category"])
+        cols[2].metric("Type", txn.get("transaction_type") or "expense")
+
+        st.markdown("**Choose a category**")
+        button_cols = st.columns(4)
+        quick_categories = list(CATEGORIES)
+        for idx, category in enumerate(quick_categories):
+            if button_cols[idx % 4].button(category, key=f"quick_cat_{txn['id']}_{category}", use_container_width=True):
+                _apply_category(conn, user_id, int(txn["id"]), category)
+                st.rerun()
+
+        st.markdown("**Create a rule from this transaction**")
+        selected_category = st.selectbox(
+            "Rule category",
+            CATEGORIES,
+            index=CATEGORIES.index(txn["category"]) if txn["category"] in CATEGORIES else CATEGORIES.index("Other"),
+            key=f"quick_category_select_{txn['id']}",
+        )
+        rule_keyword = st.text_input(
+            "Rule keyword",
+            value=_rule_keyword_from_description(txn["description"]),
+            key=f"quick_keyword_{txn['id']}",
+        )
+        apply_existing = st.checkbox(
+            "Apply this rule to existing uncategorized matches",
+            value=True,
+            key=f"quick_apply_{txn['id']}",
+        )
+        rule_cols = st.columns(2)
+        if rule_cols[0].button("Save selected category", key=f"quick_save_{txn['id']}", use_container_width=True):
+            _apply_category(conn, user_id, int(txn["id"]), selected_category)
+            st.rerun()
+        if rule_cols[1].button("Create rule", key=f"quick_rule_{txn['id']}", use_container_width=True):
+            if not rule_keyword.strip():
+                st.error("Rule keyword is required.")
+            else:
+                _create_rule_from_review(
+                    conn,
+                    user_id,
+                    rule_keyword,
+                    selected_category,
+                    apply_existing=apply_existing,
+                )
+                _apply_category(conn, user_id, int(txn["id"]), selected_category)
+                st.rerun()
+
+    nav_cols = st.columns([1, 1])
+    if nav_cols[0].button("Skip for now", use_container_width=True):
+        _skip_review_transaction(int(txn["id"]))
+        st.rerun()
+    if nav_cols[1].button("Mark as Other", use_container_width=True):
+        _apply_category(conn, user_id, int(txn["id"]), "Other")
+        _skip_review_transaction(int(txn["id"]))
+        st.rerun()
+
+
 def render() -> None:
     st.title("Spending")
     st.caption("Track accounts, import CSVs, and clean up the transaction categories that rules could not infer.")
@@ -475,21 +822,18 @@ def render() -> None:
     conn = get_connection()
     try:
         summary = get_spending_summary(conn, user_id)
-        _render_metrics(summary)
+        _render_workbench_header(conn, user_id, summary)
 
-        top_category = summary.spending_by_category[0]["category"] if summary.spending_by_category else None
-        st.info(spending_message(summary.spending_total, top_category))
-
-        tab_import, tab_accounts, tab_review, tab_insights = st.tabs(
-            ["Import", "Accounts", "Transaction Review", "Insights"]
+        tab_overview, tab_accounts, tab_transactions, tab_cash_flow, tab_import = st.tabs(
+            ["Overview", "Accounts", "Transactions", "Cash Flow", "Import"]
         )
-        with tab_import:
-            summary = _render_import_section(conn, user_id, summary)
+        with tab_overview:
+            _render_overview_section(conn, user_id, summary)
         with tab_accounts:
             _render_accounts_section(conn, user_id)
-        with tab_review:
+        with tab_transactions:
             _render_transaction_review(conn, user_id)
-        with tab_insights:
+        with tab_cash_flow:
             left, right = st.columns([1.1, 0.9])
             with left:
                 st.subheader("Spending by Category")
@@ -506,5 +850,7 @@ def render() -> None:
                 else:
                     for description, occurrences, total in subscriptions:
                         st.write(f"{description} - {occurrences} hits, ${total:,.2f}")
+        with tab_import:
+            summary = _render_import_section(conn, user_id, summary)
     finally:
         conn.close()

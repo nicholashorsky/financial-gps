@@ -22,6 +22,12 @@ Open [http://localhost:8501](http://localhost:8501), register an account, and ex
 
 For beta testing, you can enable a login shortcut that creates/uses `test@financialgps.local`.
 
+Double-click launcher:
+
+```text
+start_dev_app.bat
+```
+
 Local PowerShell:
 
 ```powershell
