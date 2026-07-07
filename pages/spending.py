@@ -204,6 +204,27 @@ def _format_money(value: float) -> str:
     return f"{sign}${abs(value):,.2f}"
 
 
+def _inject_quick_review_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stRadio"] div[role="radiogroup"] {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 0.4rem;
+            overflow-x: auto;
+            padding-bottom: 0.25rem;
+        }
+        div[data-testid="stRadio"] div[role="radiogroup"] label {
+            white-space: nowrap;
+            min-width: max-content;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _keyword_hint(description: str) -> str:
     words = [part for part in description.lower().replace("*", " ").replace("#", " ").split() if len(part) > 2]
     return " ".join(words[:2]) if words else description.lower()[:24]
@@ -698,6 +719,7 @@ def _render_transaction_review(conn, user_id: int) -> None:
 
 
 def _render_quick_review(conn, user_id: int, transactions: list[dict]) -> None:
+    _inject_quick_review_styles()
     skipped = set(st.session_state.get("spending_review_skipped", set()))
     queue = [txn for txn in transactions if int(txn["id"]) not in skipped]
     suggestions = _suggest_rule_patterns(queue)
@@ -713,39 +735,6 @@ def _render_quick_review(conn, user_id: int, transactions: list[dict]) -> None:
         st.success("No more transactions in this quick review queue.")
         return
 
-    if suggestions:
-        st.markdown("**Suggested rules**")
-        for suggestion in suggestions:
-            with st.container(border=True):
-                cols = st.columns([1.3, 0.7, 0.9, 1.1])
-                keyword = str(suggestion["keyword"])
-                cols[0].write(keyword)
-                cols[1].caption(f"{int(suggestion['count'])} matches")
-                cols[2].caption(_format_money(float(suggestion["total"])))
-                selected_category = cols[3].selectbox(
-                    "Category",
-                    CATEGORIES,
-                    index=CATEGORIES.index("Shopping") if "Shopping" in CATEGORIES else 0,
-                    key=f"suggested_rule_category_{keyword}",
-                    label_visibility="collapsed",
-                )
-                st.caption(f"Example: {suggestion['example']}")
-                if st.button(
-                    f"Create rule for '{keyword}'",
-                    key=f"suggested_rule_{keyword}",
-                    use_container_width=True,
-                ):
-                    _create_rule_from_review(
-                        conn,
-                        user_id,
-                        keyword,
-                        selected_category,
-                        apply_existing=True,
-                    )
-                    st.rerun()
-
-        st.divider()
-
     txn = queue[0]
     amount = float(txn["amount"] or 0)
     with st.container(border=True):
@@ -757,18 +746,55 @@ def _render_quick_review(conn, user_id: int, transactions: list[dict]) -> None:
         cols[2].metric("Type", txn.get("transaction_type") or "expense")
 
         st.markdown("**Choose a category**")
-        button_cols = st.columns(4)
-        quick_categories = list(CATEGORIES)
-        for idx, category in enumerate(quick_categories):
-            if button_cols[idx % 4].button(category, key=f"quick_cat_{txn['id']}_{category}", use_container_width=True):
-                _apply_category(conn, user_id, int(txn["id"]), category)
-                st.rerun()
+        quick_categories = sorted(CATEGORIES)
+        selected_quick_category = st.radio(
+            "Category",
+            quick_categories,
+            index=None,
+            horizontal=True,
+            key=f"quick_cat_{txn['id']}",
+            label_visibility="collapsed",
+        )
+        if selected_quick_category:
+            _apply_category(conn, user_id, int(txn["id"]), selected_quick_category)
+            st.rerun()
+
+        if suggestions:
+            st.markdown("**Suggested rules for this queue**")
+            for suggestion in suggestions:
+                keyword = str(suggestion["keyword"])
+                with st.container(border=True):
+                    cols = st.columns([1.3, 0.7, 0.9, 1.1])
+                    cols[0].write(keyword)
+                    cols[1].caption(f"{int(suggestion['count'])} matches")
+                    cols[2].caption(_format_money(float(suggestion["total"])))
+                    selected_category = cols[3].selectbox(
+                        "Category",
+                        quick_categories,
+                        index=quick_categories.index("Shopping") if "Shopping" in quick_categories else 0,
+                        key=f"suggested_rule_category_{keyword}",
+                        label_visibility="collapsed",
+                    )
+                    st.caption(f"Example: {suggestion['example']}")
+                    if st.button(
+                        f"Create rule for '{keyword}'",
+                        key=f"suggested_rule_{keyword}",
+                        use_container_width=True,
+                    ):
+                        _create_rule_from_review(
+                            conn,
+                            user_id,
+                            keyword,
+                            selected_category,
+                            apply_existing=True,
+                        )
+                        st.rerun()
 
         st.markdown("**Create a rule from this transaction**")
         selected_category = st.selectbox(
             "Rule category",
-            CATEGORIES,
-            index=CATEGORIES.index(txn["category"]) if txn["category"] in CATEGORIES else CATEGORIES.index("Other"),
+            quick_categories,
+            index=quick_categories.index(txn["category"]) if txn["category"] in quick_categories else quick_categories.index("Other"),
             key=f"quick_category_select_{txn['id']}",
         )
         rule_keyword = st.text_input(
