@@ -1,0 +1,124 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+<style>
+.h1{font-family:Inter,Arial,sans-serif;font-size:34px;font-weight:700;fill:#17181C}
+.h2{font-family:Inter,Arial,sans-serif;font-size:20px;font-weight:700;fill:#17181C}
+.body{font-family:Inter,Arial,sans-serif;font-size:14px;fill:#30323A}
+.small{font-family:Inter,Arial,sans-serif;font-size:12px;fill:#747783}
+.label{font-family:Inter,Arial,sans-serif;font-size:13px;font-weight:600;fill:#30323A}
+.button{font-family:Inter,Arial,sans-serif;font-size:13px;font-weight:700;text-anchor:middle;dominant-baseline:middle}
+.card{fill:#fff;stroke:#E1E3E8;stroke-width:1.25}
+.soft{fill:#F7F7FA;stroke:#E1E3E8;stroke-width:1.25}
+.psoft{fill:#F1EFFF;stroke:#D8D2FF;stroke-width:1.25}
+.purple{fill:#6757E5}
+.divider{stroke:#ECEEF2;stroke-width:1}
+</style>
+<rect width="1440" height="1024" fill="#F5F6F8"/>
+<rect x="64" y="34" width="1312" height="956" rx="24" fill="#fff" stroke="#DADCE3" stroke-width="1.25"/>
+
+<text x="112" y="94" class="h1">Spending</text>
+<text x="112" y="124" class="body" fill="#747783">Understand where your money goes and clean up imported transactions.</text>
+<rect x="1194" y="72" width="134" height="42" rx="12" class="purple"/>
+<text x="1261" y="94" class="button" fill="#fff">Import CSV</text>
+
+<rect x="112" y="158" width="1216" height="96" rx="18" class="psoft"/>
+<circle cx="151" cy="206" r="22" class="purple"/>
+<text x="151" y="212" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="700" fill="#fff">18</text>
+<text x="188" y="194" class="h2">Transactions need your attention</text>
+<text x="188" y="222" class="body" fill="#666A75">Review uncertain categories and possible transfers before relying on your totals.</text>
+<rect x="1112" y="184" width="184" height="44" rx="12" class="purple"/>
+<text x="1204" y="207" class="button" fill="#fff">Review transactions</text>
+
+<text x="112" y="308" class="h2">Accounts</text>
+<text x="720" y="308" class="h2">Spending overview</text>
+
+<rect x="112" y="328" width="548" height="278" rx="20" class="card"/>
+<text x="136" y="360" class="small">ACCOUNTS INCLUDED IN TOTALS</text>
+<text x="632" y="360" text-anchor="end" class="small" fill="#6757E5">Manage accounts</text>
+
+<circle cx="160" cy="416" r="24" fill="#E9E7FF"/>
+<text x="160" y="421" text-anchor="middle" class="label" fill="#5A4CD6">RBC</text>
+<text x="200" y="405" class="label">RBC Chequing</text>
+<text x="200" y="428" class="small">Updated today · 322 transactions</text>
+<rect x="200" y="443" width="96" height="23" rx="11.5" fill="#ECF8F0" stroke="#CFEBD8"/>
+<text x="248" y="459" text-anchor="middle" class="small" fill="#2D8A53">Included</text>
+<text x="628" y="408" text-anchor="end" class="label">$673.56</text>
+<text x="628" y="431" text-anchor="end" class="small" fill="#2D8A53">+$1,640 net flow</text>
+<line x1="136" y1="482" x2="636" y2="482" class="divider"/>
+
+<circle cx="160" cy="528" r="24" fill="#FFF1E2"/>
+<text x="160" y="533" text-anchor="middle" class="label" fill="#C77B11">VISA</text>
+<text x="200" y="517" class="label">RBC Visa</text>
+<text x="200" y="540" class="small">Updated today · 201 transactions</text>
+<rect x="200" y="555" width="96" height="23" rx="11.5" fill="#ECF8F0" stroke="#CFEBD8"/>
+<text x="248" y="571" text-anchor="middle" class="small" fill="#2D8A53">Included</text>
+<text x="628" y="520" text-anchor="end" class="label">−$1,274.20</text>
+<text x="628" y="543" text-anchor="end" class="small" fill="#D14B41">−$840 net flow</text>
+
+<rect x="720" y="328" width="608" height="278" rx="20" class="card"/>
+<text x="744" y="360" class="small">LAST 30 DAYS</text>
+<rect x="1180" y="344" width="124" height="34" rx="10" fill="#fff" stroke="#D7D9E0"/>
+<text x="1196" y="366" class="small">Last 30 days</text>
+<path d="M1284 357l6 6 6-6" fill="none" stroke="#747783" stroke-width="1.5" stroke-linecap="round"/>
+
+<text x="744" y="412" class="small">TOTAL SPENT</text>
+<text x="744" y="450" class="h1" font-size="30">$3,420</text>
+<text x="904" y="444" class="small" fill="#2D8A53">↓ 8.2% vs last month</text>
+
+<text x="744" y="490" class="label">Housing</text>
+<text x="1296" y="490" text-anchor="end" class="label">$1,220</text>
+<rect x="744" y="502" width="552" height="8" rx="4" fill="#ECEEF2"/>
+<rect x="744" y="502" width="382" height="8" rx="4" fill="#6757E5"/>
+
+<text x="744" y="530" class="label">Groceries</text>
+<text x="1296" y="530" text-anchor="end" class="label">$620</text>
+<rect x="744" y="542" width="552" height="8" rx="4" fill="#ECEEF2"/>
+<rect x="744" y="542" width="194" height="8" rx="4" fill="#8877F2"/>
+
+<text x="744" y="570" class="label">Dining</text>
+<text x="1296" y="570" text-anchor="end" class="label">$380</text>
+<rect x="744" y="582" width="552" height="8" rx="4" fill="#ECEEF2"/>
+<rect x="744" y="582" width="119" height="8" rx="4" fill="#AA9CF5"/>
+
+<text x="112" y="658" class="h2">Recent transactions</text>
+<text x="1328" y="658" text-anchor="end" class="small" fill="#6757E5">View all transactions →</text>
+<rect x="112" y="678" width="1216" height="252" rx="20" class="card"/>
+
+<text x="142" y="714" class="small">DATE</text>
+<text x="274" y="714" class="small">DESCRIPTION</text>
+<text x="598" y="714" class="small">ACCOUNT</text>
+<text x="830" y="714" class="small">CATEGORY</text>
+<text x="1296" y="714" text-anchor="end" class="small">AMOUNT</text>
+<line x1="136" y1="730" x2="1304" y2="730" class="divider"/>
+
+<text x="142" y="760" class="body">Jul 18</text>
+<text x="274" y="760" class="label">Walmart</text>
+<text x="598" y="760" class="body">RBC Visa</text>
+<rect x="830" y="742" width="96" height="28" rx="14" fill="#F1EFFF"/>
+<text x="878" y="761" text-anchor="middle" class="small" fill="#5A4CD6">Groceries</text>
+<text x="1296" y="760" text-anchor="end" class="label">−$82.13</text>
+<line x1="136" y1="778" x2="1304" y2="778" class="divider"/>
+
+<text x="142" y="808" class="body">Jul 17</text>
+<text x="274" y="808" class="label">Payroll deposit</text>
+<text x="598" y="808" class="body">RBC Chequing</text>
+<rect x="830" y="790" width="78" height="28" rx="14" fill="#ECF8F0"/>
+<text x="869" y="809" text-anchor="middle" class="small" fill="#2D8A53">Income</text>
+<text x="1296" y="808" text-anchor="end" class="label" fill="#2D8A53">+$2,420.00</text>
+<line x1="136" y1="826" x2="1304" y2="826" class="divider"/>
+
+<text x="142" y="856" class="body">Jul 16</text>
+<text x="274" y="856" class="label">Amazon.ca</text>
+<text x="598" y="856" class="body">RBC Visa</text>
+<rect x="830" y="838" width="112" height="28" rx="14" fill="#FFF4E5"/>
+<text x="886" y="857" text-anchor="middle" class="small" fill="#A86917">Needs review</text>
+<text x="1296" y="856" text-anchor="end" class="label">−$47.83</text>
+<line x1="136" y1="874" x2="1304" y2="874" class="divider"/>
+
+<text x="142" y="904" class="body">Jul 15</text>
+<text x="274" y="904" class="label">Transfer to Visa</text>
+<text x="598" y="904" class="body">RBC Chequing</text>
+<rect x="830" y="886" width="82" height="28" rx="14" fill="#EAF2FF"/>
+<text x="871" y="905" text-anchor="middle" class="small" fill="#3874C8">Transfer</text>
+<text x="1296" y="904" text-anchor="end" class="label">−$250.00</text>
+</svg>

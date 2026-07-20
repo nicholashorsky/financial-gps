@@ -241,8 +241,8 @@ def get_spending_summary(conn: sqlite3.Connection, user_id: int, limit: int = 10
         """
         SELECT
             COUNT(*) AS transaction_count,
-            COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 THEN ABS(amount) ELSE 0 END), 0) AS spending_total,
-            COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 THEN amount ELSE 0 END), 0) AS income_total
+            COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN ABS(amount) ELSE 0 END), 0) AS spending_total,
+            COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN amount ELSE 0 END), 0) AS income_total
         FROM transactions
         WHERE user_id = ?
         """,
@@ -262,7 +262,7 @@ def get_spending_summary(conn: sqlite3.Connection, user_id: int, limit: int = 10
         """
         SELECT category, ROUND(SUM(ABS(amount)), 2) AS total
         FROM transactions
-        WHERE user_id = ? AND amount < 0 AND is_excluded = 0
+        WHERE user_id = ? AND amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer'
         GROUP BY category
         ORDER BY total DESC, category ASC
         """,

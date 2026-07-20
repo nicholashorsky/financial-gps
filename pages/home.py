@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -35,8 +33,8 @@ def _monthly_sparkline(conn, user_id: int) -> pd.DataFrame:
     rows = conn.execute(
         """
         SELECT substr(date, 1, 7) AS month,
-               COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 THEN ABS(amount) ELSE 0 END), 0) AS spending,
-               COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 THEN amount ELSE 0 END), 0) AS income
+               COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN ABS(amount) ELSE 0 END), 0) AS spending,
+               COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN amount ELSE 0 END), 0) AS income
         FROM transactions
         WHERE user_id = ?
         GROUP BY substr(date, 1, 7)

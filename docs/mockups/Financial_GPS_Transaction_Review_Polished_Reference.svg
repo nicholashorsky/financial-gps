@@ -1,0 +1,134 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
+  <defs>
+    <style>
+      .font { font-family: Inter, Arial, sans-serif; }
+      .h1 { font-family: Inter, Arial, sans-serif; font-weight: 700; font-size: 32px; fill: #17181C; }
+      .h2 { font-family: Inter, Arial, sans-serif; font-weight: 700; font-size: 18px; fill: #17181C; }
+      .body { font-family: Inter, Arial, sans-serif; font-size: 14px; fill: #30323A; }
+      .small { font-family: Inter, Arial, sans-serif; font-size: 12px; fill: #737783; }
+      .label { font-family: Inter, Arial, sans-serif; font-size: 13px; font-weight: 600; fill: #30323A; }
+      .button { font-family: Inter, Arial, sans-serif; font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+      .card { fill: #FFFFFF; stroke: #E2E4EA; stroke-width: 1.25; }
+      .active { fill: #FFFFFF; stroke: #7667F5; stroke-width: 2; }
+      .soft { fill: #F7F7FA; stroke: #E2E4EA; stroke-width: 1.25; }
+      .purple-soft { fill: #F1EFFF; stroke: #D8D2FF; stroke-width: 1.25; }
+      .purple { fill: #6757E5; }
+      .muted-line { fill: #E7E8ED; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="1024" fill="#F5F6F8"/>
+
+  <!-- Main page -->
+  <rect x="70" y="42" width="1300" height="940" rx="24" fill="#FFFFFF" stroke="#DADCE3" stroke-width="1.25"/>
+
+  <!-- Header -->
+  <text x="118" y="103" class="h1">Review transactions</text>
+  <text x="118" y="132" class="body" fill="#737783">Choose a category, save, or create a rule for future matches.</text>
+
+  <!-- Progress -->
+  <rect x="1038" y="70" width="284" height="82" rx="16" class="soft"/>
+  <text x="1062" y="97" class="label">18 left to review</text>
+  <text x="1296" y="97" text-anchor="end" class="small">22 of 40 complete</text>
+  <rect x="1062" y="116" width="234" height="9" rx="4.5" fill="#E4E5EA"/>
+  <rect x="1062" y="116" width="129" height="9" rx="4.5" fill="#6757E5"/>
+  <text x="1062" y="143" class="small">Oldest transactions first</text>
+
+  <!-- Card 1 -->
+  <rect x="118" y="184" width="1204" height="182" rx="20" class="card"/>
+  <rect x="146" y="213" width="64" height="64" rx="14" fill="#F0F1F4" stroke="#D9DBE2"/>
+  <text x="178" y="251" text-anchor="middle" class="h2" font-size="16">A</text>
+
+  <text x="236" y="225" class="h2">Amazon.ca</text>
+  <rect x="348" y="207" width="102" height="25" rx="12.5" fill="#FFF4E5"/>
+  <text x="399" y="224" text-anchor="middle" class="small" fill="#A86917">Needs review</text>
+  <text x="236" y="252" class="small">May 15, 2026  ·  RBC Visa</text>
+
+  <text x="1288" y="228" text-anchor="end" class="h2">−$87.42</text>
+  <text x="1288" y="251" text-anchor="end" class="small">CAD</text>
+
+  <text x="236" y="292" class="small">CATEGORY</text>
+  <rect x="236" y="302" width="420" height="42" rx="11" fill="#FFFFFF" stroke="#AAA0F8" stroke-width="1.5"/>
+  <text x="254" y="328" class="body" fill="#6757E5">Select category</text>
+  <path d="M632 318 l7 7 l7 -7" fill="none" stroke="#6757E5" stroke-width="1.8" stroke-linecap="round"/>
+
+  <rect x="820" y="302" width="104" height="42" rx="11" fill="#FFFFFF" stroke="#D2D4DC"/>
+  <text x="872" y="323" class="button" fill="#555965">Skip</text>
+
+  <rect x="940" y="302" width="154" height="42" rx="11" fill="#FFFFFF" stroke="#AAA0F8" stroke-width="1.5"/>
+  <text x="1017" y="323" class="button" fill="#6757E5">Create rule</text>
+
+  <rect x="1110" y="302" width="178" height="42" rx="11" class="purple"/>
+  <text x="1199" y="323" class="button" fill="#FFFFFF">Save category</text>
+
+  <!-- Card 2 -->
+  <rect x="118" y="386" width="1204" height="182" rx="20" class="card"/>
+  <rect x="146" y="415" width="64" height="64" rx="14" fill="#F0F1F4" stroke="#D9DBE2"/>
+  <text x="178" y="453" text-anchor="middle" class="h2" font-size="16">T</text>
+
+  <text x="236" y="427" class="h2">Tim Hortons</text>
+  <rect x="370" y="409" width="82" height="25" rx="12.5" fill="#F1EFFF"/>
+  <text x="411" y="426" text-anchor="middle" class="small" fill="#6757E5">Recurring</text>
+  <text x="236" y="454" class="small">May 15, 2026  ·  RBC Visa</text>
+
+  <text x="1288" y="430" text-anchor="end" class="h2">−$4.56</text>
+  <text x="1288" y="453" text-anchor="end" class="small">CAD</text>
+
+  <text x="236" y="494" class="small">CATEGORY</text>
+  <rect x="236" y="504" width="420" height="42" rx="11" fill="#FFFFFF" stroke="#AAA0F8" stroke-width="1.5"/>
+  <text x="254" y="530" class="body" fill="#6757E5">Food &amp; dining</text>
+  <path d="M632 520 l7 7 l7 -7" fill="none" stroke="#6757E5" stroke-width="1.8" stroke-linecap="round"/>
+
+  <rect x="820" y="504" width="104" height="42" rx="11" fill="#FFFFFF" stroke="#D2D4DC"/>
+  <text x="872" y="525" class="button" fill="#555965">Skip</text>
+
+  <rect x="940" y="504" width="154" height="42" rx="11" fill="#FFFFFF" stroke="#AAA0F8" stroke-width="1.5"/>
+  <text x="1017" y="525" class="button" fill="#6757E5">Create rule</text>
+
+  <rect x="1110" y="504" width="178" height="42" rx="11" class="purple"/>
+  <text x="1199" y="525" class="button" fill="#FFFFFF">Save category</text>
+
+  <!-- Active card -->
+  <rect x="118" y="588" width="1204" height="302" rx="20" class="active"/>
+  <rect x="146" y="617" width="64" height="64" rx="14" fill="#F0F1F4" stroke="#D9DBE2"/>
+  <text x="178" y="655" text-anchor="middle" class="h2" font-size="16">S</text>
+
+  <text x="236" y="629" class="h2">Spotify</text>
+  <rect x="322" y="611" width="82" height="25" rx="12.5" fill="#F1EFFF"/>
+  <text x="363" y="628" text-anchor="middle" class="small" fill="#6757E5">Recurring</text>
+  <text x="236" y="656" class="small">July 15, 2026  ·  RBC Chequing</text>
+
+  <text x="1288" y="632" text-anchor="end" class="h2">−$11.99</text>
+  <text x="1288" y="655" text-anchor="end" class="small">CAD</text>
+
+  <text x="236" y="696" class="small">CATEGORY</text>
+  <rect x="236" y="706" width="420" height="42" rx="11" fill="#FFFFFF" stroke="#AAA0F8" stroke-width="1.5"/>
+  <text x="254" y="732" class="body" fill="#6757E5">Entertainment</text>
+  <path d="M632 722 l7 7 l7 -7" fill="none" stroke="#6757E5" stroke-width="1.8" stroke-linecap="round"/>
+
+  <rect x="820" y="706" width="104" height="42" rx="11" fill="#FFFFFF" stroke="#D2D4DC"/>
+  <text x="872" y="727" class="button" fill="#555965">Skip</text>
+
+  <rect x="940" y="706" width="154" height="42" rx="11" fill="#FFFFFF" stroke="#AAA0F8" stroke-width="1.5"/>
+  <text x="1017" y="727" class="button" fill="#6757E5">Create rule</text>
+
+  <rect x="1110" y="706" width="178" height="42" rx="11" class="purple"/>
+  <text x="1199" y="727" class="button" fill="#FFFFFF">Save category</text>
+
+  <!-- Suggested rule -->
+  <rect x="236" y="776" width="1052" height="86" rx="16" class="purple-soft"/>
+  <circle cx="264" cy="819" r="17" fill="#6757E5"/>
+  <path d="M256 819 l5 5 l10 -11" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="294" y="808" class="label" fill="#4F43BD">Suggested rule</text>
+  <text x="294" y="833" class="body">When merchant contains “SPOTIFY”, categorize as Entertainment.</text>
+  <rect x="739" y="795" width="91" height="28" rx="14" fill="#FFFFFF" stroke="#D8D2FF"/>
+  <text x="784" y="813" text-anchor="middle" class="small" fill="#6757E5">3 matches</text>
+  <text x="739" y="843" class="small">Includes this transaction and 2 other uncategorized matches.</text>
+
+  <rect x="1042" y="797" width="222" height="44" rx="11" class="purple"/>
+  <text x="1153" y="819" class="button" fill="#FFFFFF">Create &amp; apply to 3</text>
+
+  <!-- Footer note -->
+  <text x="118" y="932" class="small">Saving moves the transaction out of the queue. Skipped transactions remain uncategorized and can be reviewed later.</text>
+</svg>

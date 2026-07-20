@@ -22,7 +22,15 @@ Open [http://localhost:8501](http://localhost:8501), register an account, and ex
 
 For beta testing, you can enable a login shortcut that creates/uses `test@financialgps.local`.
 
-Double-click launcher:
+On Linux or macOS, run the development launcher from the project directory:
+
+```bash
+./start_dev_app.sh
+```
+
+The launcher uses `.venv`, enables the beta test login for that process, starts Streamlit, and opens the app in your browser. Press `Ctrl+C` in the terminal to stop it.
+
+On Windows, double-click the launcher:
 
 ```text
 start_dev_app.bat
@@ -43,6 +51,20 @@ allow_test_login = true
 ```
 
 Do not enable this shortcut for a real public test with personal financial data.
+
+## Development Tools
+
+Install application and development dependencies into the project virtual environment:
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+```
+
+Run Ruff to check the Python source:
+
+```bash
+.venv/bin/ruff check .
+```
 
 ## Project Structure
 

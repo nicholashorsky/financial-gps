@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from datetime import date
 import re
 from typing import Iterable
@@ -11,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from budget.categorizer import CATEGORIES, add_user_rule, infer_transaction_type
+from budget.categorizer import CATEGORIES, add_user_rule, infer_transaction_type, normalize_text
 from budget.csv_parser import parse_csv, preview_csv
 from budget.importer import get_spending_summary, import_csv_transactions
 from budget.narrator import csv_sync_message, spending_message
@@ -39,8 +38,8 @@ def _monthly_totals(conn, user_id: int) -> pd.DataFrame:
     rows = conn.execute(
         """
         SELECT substr(date, 1, 7) AS month,
-               COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 THEN amount ELSE 0 END), 0) AS income,
-               COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 THEN ABS(amount) ELSE 0 END), 0) AS spending
+               COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN amount ELSE 0 END), 0) AS income,
+               COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN ABS(amount) ELSE 0 END), 0) AS spending
         FROM transactions
         WHERE user_id = ?
         GROUP BY substr(date, 1, 7)
@@ -67,7 +66,8 @@ def _current_month_summary(conn, user_id: int) -> pd.DataFrame:
         """
         SELECT category, COALESCE(SUM(ABS(amount)), 0) AS total
         FROM transactions
-        WHERE user_id = ? AND amount < 0 AND is_excluded = 0 AND date >= ? AND date < ?
+        WHERE user_id = ? AND amount < 0 AND is_excluded = 0
+          AND COALESCE(category, '') <> 'Transfer' AND date >= ? AND date < ?
         GROUP BY category
         ORDER BY total DESC, category ASC
         """,
@@ -95,7 +95,7 @@ def _subscription_hunter(conn, user_id: int) -> list[tuple[str, int, float]]:
         """
         SELECT description, COUNT(*) AS occurrences, ROUND(SUM(ABS(amount)), 2) AS total
         FROM transactions
-        WHERE user_id = ? AND amount < 0 AND is_excluded = 0
+        WHERE user_id = ? AND amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer'
         GROUP BY lower(description)
         HAVING occurrences >= 2
         ORDER BY total DESC, occurrences DESC
@@ -136,9 +136,9 @@ def _spending_workbench_stats(conn, user_id: int) -> dict[str, float | int]:
     row = conn.execute(
         f"""
         SELECT
-            COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND date >= ? AND date < ? THEN amount ELSE 0 END), 0) AS month_income,
-            COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND date >= ? AND date < ? THEN ABS(amount) ELSE 0 END), 0) AS month_spending,
-            COALESCE(SUM(CASE WHEN is_excluded = 0 AND date >= ? AND date < ? THEN amount ELSE 0 END), 0) AS month_net,
+            COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' AND date >= ? AND date < ? THEN amount ELSE 0 END), 0) AS month_income,
+            COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' AND date >= ? AND date < ? THEN ABS(amount) ELSE 0 END), 0) AS month_spending,
+            COALESCE(SUM(CASE WHEN is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' AND date >= ? AND date < ? THEN amount ELSE 0 END), 0) AS month_net,
             SUM(CASE WHEN source = 'csv_import' AND {UNREVIEWED_SQL} THEN 1 ELSE 0 END) AS review_count,
             SUM(CASE WHEN is_excluded = 1 THEN 1 ELSE 0 END) AS excluded_count
         FROM transactions
@@ -161,7 +161,6 @@ def _review_transactions(
     category_filter: str = "Needs review",
     account_id: int | None = None,
     search: str = "",
-    limit: int = 50,
 ) -> list[dict]:
     where = "t.user_id = ? AND t.source = 'csv_import'"
     params: list[object] = [user_id]
@@ -191,10 +190,9 @@ def _review_transactions(
         FROM transactions t
         LEFT JOIN accounts a ON a.id = t.account_id
         WHERE {where}
-        ORDER BY t.date DESC, t.id DESC
-        LIMIT ?
+        ORDER BY t.date ASC, t.id ASC
         """,
-        (*params, limit),
+        params,
     ).fetchall()
     return [dict(row) for row in rows]
 
@@ -202,27 +200,6 @@ def _review_transactions(
 def _format_money(value: float) -> str:
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.2f}"
-
-
-def _inject_quick_review_styles() -> None:
-    st.markdown(
-        """
-        <style>
-        div[data-testid="stRadio"] div[role="radiogroup"] {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 0.4rem;
-            overflow-x: auto;
-            padding-bottom: 0.25rem;
-        }
-        div[data-testid="stRadio"] div[role="radiogroup"] label {
-            white-space: nowrap;
-            min-width: max-content;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def _keyword_hint(description: str) -> str:
@@ -236,10 +213,24 @@ def _rule_keyword_from_description(description: str) -> str:
     tokens = [
         token
         for token in normalized.split()
-        if len(token) > 2 and token not in {"the", "and", "inc", "ltd", "canada", "guelph", "toronto", "online"}
+        if len(token) > 2
+        and token
+        not in {
+            "the",
+            "and",
+            "inc",
+            "ltd",
+            "canada",
+            "guelph",
+            "toronto",
+            "online",
+            "rao",
+        }
     ]
     if not tokens:
         return _keyword_hint(description)
+    if tokens[0] == "transfer" and len(tokens) > 1:
+        tokens = tokens[1:]
     if tokens[0] in {"amzn", "amazon", "amazonca"}:
         return "amazon"
     if len(tokens) >= 2 and tokens[0] == "wal" and tokens[1] == "mart":
@@ -249,26 +240,48 @@ def _rule_keyword_from_description(description: str) -> str:
     return " ".join(tokens[:2])
 
 
-def _suggest_rule_patterns(transactions: list[dict], limit: int = 5) -> list[dict[str, object]]:
-    grouped: dict[str, dict[str, object]] = {}
-    for txn in transactions:
-        keyword = _rule_keyword_from_description(txn["description"] or "")
-        if not keyword:
-            continue
-        item = grouped.setdefault(
-            keyword,
-            {
-                "keyword": keyword,
-                "count": 0,
-                "total": 0.0,
-                "example": txn["description"] or "",
-            },
-        )
-        item["count"] = int(item["count"]) + 1
-        item["total"] = float(item["total"]) + abs(float(txn["amount"] or 0))
+def _review_session_progress(
+    session_ids: set[int],
+    current_ids: set[int],
+    skipped_ids: set[int],
+) -> dict[str, int]:
+    """Return stable progress counts for the current review session."""
 
-    suggestions = [item for item in grouped.values() if int(item["count"]) >= 2]
-    return sorted(suggestions, key=lambda item: (int(item["count"]), float(item["total"])), reverse=True)[:limit]
+    tracked_ids = session_ids | current_ids
+    skipped = len(tracked_ids & current_ids & skipped_ids)
+    completed = len(tracked_ids - current_ids)
+    remaining = len(current_ids - skipped_ids)
+    return {
+        "total": len(tracked_ids),
+        "completed": completed,
+        "remaining": remaining,
+        "skipped": skipped,
+    }
+
+
+def _rule_preview(conn, user_id: int, keyword: str) -> dict[str, object]:
+    """Describe the user-scoped rows a review rule would update."""
+
+    normalized_keyword = normalize_text(keyword)
+    if not normalized_keyword:
+        return {"count": 0, "accounts": []}
+
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT t.id, t.description, COALESCE(a.name, 'Unassigned account') AS account_name
+        FROM transactions t
+        LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = t.user_id
+        WHERE t.user_id = ?
+          AND {UNREVIEWED_TXN_SQL}
+        ORDER BY account_name ASC
+        """,
+        (user_id,),
+    ).fetchall()
+    matching_rows = [row for row in rows if normalized_keyword in normalize_text(row["description"] or "")]
+    return {
+        "count": len(matching_rows),
+        "accounts": sorted({str(row["account_name"]) for row in matching_rows}),
+    }
 
 
 def _apply_category(conn, user_id: int, transaction_id: int, category: str) -> None:
@@ -301,18 +314,19 @@ def _create_rule_from_review(
     rule_id = add_user_rule(conn, user_id, keyword, category, priority=90)
     if not apply_existing:
         return
-    like = f"%{keyword.strip().lower()}%"
+    normalized_keyword = normalize_text(keyword)
     rows = conn.execute(
         f"""
         SELECT id, description, amount
         FROM transactions
         WHERE user_id = ?
-          AND lower(description) LIKE ?
           AND {UNREVIEWED_SQL}
         """,
-        (user_id, like),
+        (user_id,),
     ).fetchall()
     for row in rows:
+        if normalized_keyword not in normalize_text(row["description"] or ""):
+            continue
         transaction_type = infer_transaction_type(float(row["amount"] or 0), category, row["description"] or "")
         conn.execute(
             "UPDATE transactions SET category = ?, transaction_type = ? WHERE id = ? AND user_id = ?",
@@ -667,7 +681,8 @@ def _render_transaction_review(conn, user_id: int) -> None:
         key="transaction_review_mode",
     )
     if review_mode == "Quick review":
-        _render_quick_review(conn, user_id, transactions)
+        session_key = f"{filter_choice}|{account_options[account_choice]}|{search.strip().lower()}"
+        _render_quick_review(conn, user_id, transactions, session_key=session_key)
         return
 
     st.caption(f"Showing {len(transactions)} imported transaction(s).")
@@ -696,13 +711,22 @@ def _render_transaction_review(conn, user_id: int) -> None:
                 value=True,
                 key=f"review_apply_{txn['id']}",
             )
-
+            preview = _rule_preview(conn, user_id, rule_keyword)
+            affected_accounts = ", ".join(preview["accounts"]) if preview["accounts"] else "None"
+            st.caption(
+                f"Rule preview: {preview['count']} uncategorized match(es) across {affected_accounts}. "
+                "Already categorized transactions will not be overwritten."
+            )
             action_cols = st.columns(2)
             if action_cols[0].button("Save category only", key=f"save_category_{txn['id']}", use_container_width=True):
                 _apply_category(conn, user_id, int(txn["id"]), selected_category)
                 st.success("Transaction updated.")
                 st.rerun()
-            if action_cols[1].button("Create rule and categorize", key=f"create_rule_{txn['id']}", use_container_width=True):
+            if action_cols[1].button(
+                "Create rule and categorize",
+                key=f"create_rule_{txn['id']}",
+                use_container_width=True,
+            ):
                 if not rule_keyword.strip():
                     st.error("Rule keyword is required.")
                 else:
@@ -718,120 +742,157 @@ def _render_transaction_review(conn, user_id: int) -> None:
                     st.rerun()
 
 
-def _render_quick_review(conn, user_id: int, transactions: list[dict]) -> None:
-    _inject_quick_review_styles()
+def _render_quick_review(
+    conn,
+    user_id: int,
+    transactions: list[dict],
+    *,
+    session_key: str,
+) -> None:
     skipped = set(st.session_state.get("spending_review_skipped", set()))
-    queue = [txn for txn in transactions if int(txn["id"]) not in skipped]
-    suggestions = _suggest_rule_patterns(queue)
+    current_ids = {int(txn["id"]) for txn in transactions}
 
-    top_cols = st.columns([1, 1, 1])
-    top_cols[0].metric("In this queue", len(queue))
-    top_cols[1].metric("Skipped", len(skipped))
-    if top_cols[2].button("Reset skips", use_container_width=True, disabled=not skipped):
+    if st.session_state.get("spending_review_session_key") != session_key:
+        st.session_state.spending_review_session_key = session_key
+        st.session_state.spending_review_session_ids = current_ids
+        skipped = set()
+        st.session_state.spending_review_skipped = skipped
+
+    session_ids = set(st.session_state.get("spending_review_session_ids", set())) | current_ids
+    st.session_state.spending_review_session_ids = session_ids
+    progress = _review_session_progress(session_ids, current_ids, skipped)
+
+    progress_cols = st.columns([1.4, 1, 1, 1])
+    progress_cols[0].metric("Review session", f"{progress['completed']} of {progress['total']} complete")
+    progress_cols[1].metric("Remaining", progress["remaining"])
+    progress_cols[2].metric("Skipped", progress["skipped"])
+    if progress_cols[3].button("Reset skips", use_container_width=True, disabled=not progress["skipped"]):
         _clear_review_skips()
         st.rerun()
 
+    completion_ratio = progress["completed"] / progress["total"] if progress["total"] else 1.0
+    st.progress(completion_ratio)
+    st.caption(
+        "Skipped transactions remain uncategorized and can be reviewed later. "
+        "Skipping does not delete or exclude a transaction."
+    )
+
+    queue = [txn for txn in transactions if int(txn["id"]) not in skipped]
     if not queue:
-        st.success("No more transactions in this quick review queue.")
+        st.success("No more transactions remain in this quick review session.")
         return
 
-    txn = queue[0]
+    page_size_choice = st.selectbox(
+        "Transactions shown",
+        options=[10, 25, 50, 100, "All"],
+        index=0,
+        key="spending_review_page_size",
+    )
+    page_size = len(queue) if page_size_choice == "All" else int(page_size_choice)
+    st.caption(f"Showing the oldest {min(page_size, len(queue))} of {len(queue)} remaining transaction(s).")
+    for txn in queue[:page_size]:
+        _render_review_card(conn, user_id, txn)
+
+
+def _render_review_card(conn, user_id: int, txn: dict) -> None:
+    transaction_id = int(txn["id"])
     amount = float(txn["amount"] or 0)
+    categories = sorted(CATEGORIES)
+    current_category = txn["category"] if txn["category"] in categories else "Other"
+    selected_category = st.session_state.get(f"quick_category_{transaction_id}", current_category)
+
     with st.container(border=True):
-        st.caption(f"{txn['date']} | {txn.get('account_name') or 'Unassigned account'}")
-        st.subheader(txn["description"] or "Imported transaction")
-        cols = st.columns(3)
-        cols[0].metric("Amount", _format_money(amount))
-        cols[1].metric("Current", txn["category"])
-        cols[2].metric("Type", txn.get("transaction_type") or "expense")
+        heading_cols = st.columns([0.8, 3.4, 1])
+        heading_cols[0].markdown(f"### {(txn['description'] or 'T')[0].upper()}")
+        heading_cols[1].subheader(txn["description"] or "Imported transaction")
+        heading_cols[1].caption(f"{txn['date']} · {txn.get('account_name') or 'Unassigned account'}")
+        heading_cols[2].markdown(f"### {_format_money(amount)}")
+        heading_cols[2].caption(txn["category"])
 
-        st.markdown("**Choose a category**")
-        quick_categories = sorted(CATEGORIES)
-        selected_quick_category = st.radio(
+        category_col, skip_col, rule_col, save_col = st.columns([2.4, 0.8, 1, 1.1])
+        selected_category = category_col.selectbox(
             "Category",
-            quick_categories,
-            index=None,
-            horizontal=True,
-            key=f"quick_cat_{txn['id']}",
-            label_visibility="collapsed",
+            categories,
+            index=categories.index(current_category),
+            key=f"quick_category_{transaction_id}",
         )
-        if selected_quick_category:
-            _apply_category(conn, user_id, int(txn["id"]), selected_quick_category)
+        if skip_col.button("Skip", key=f"quick_skip_{transaction_id}", use_container_width=True):
+            _skip_review_transaction(transaction_id)
+            st.rerun()
+        if rule_col.button("Create rule", key=f"quick_open_rule_{transaction_id}", use_container_width=True):
+            st.session_state[f"quick_rule_keyword_{transaction_id}"] = _rule_keyword_from_description(
+                txn["description"] or ""
+            )
+            st.session_state[f"quick_rule_open_{transaction_id}"] = True
+            st.rerun()
+        if save_col.button(
+            "Save category",
+            key=f"quick_save_{transaction_id}",
+            type="primary",
+            use_container_width=True,
+        ):
+            _apply_category(conn, user_id, transaction_id, selected_category)
             st.rerun()
 
-        if suggestions:
-            st.markdown("**Suggested rules for this queue**")
-            for suggestion in suggestions:
-                keyword = str(suggestion["keyword"])
-                with st.container(border=True):
-                    cols = st.columns([1.3, 0.7, 0.9, 1.1])
-                    cols[0].write(keyword)
-                    cols[1].caption(f"{int(suggestion['count'])} matches")
-                    cols[2].caption(_format_money(float(suggestion["total"])))
-                    selected_category = cols[3].selectbox(
-                        "Category",
-                        quick_categories,
-                        index=quick_categories.index("Shopping") if "Shopping" in quick_categories else 0,
-                        key=f"suggested_rule_category_{keyword}",
-                        label_visibility="collapsed",
-                    )
-                    st.caption(f"Example: {suggestion['example']}")
-                    if st.button(
-                        f"Create rule for '{keyword}'",
-                        key=f"suggested_rule_{keyword}",
-                        use_container_width=True,
-                    ):
-                        _create_rule_from_review(
-                            conn,
-                            user_id,
-                            keyword,
-                            selected_category,
-                            apply_existing=True,
-                        )
-                        st.rerun()
+        suggested_keyword = _rule_keyword_from_description(txn["description"] or "")
+        suggestion = _rule_preview(conn, user_id, suggested_keyword)
+        if int(suggestion["count"]) >= 2 and not st.session_state.get(f"quick_rule_open_{transaction_id}"):
+            st.info(
+                f"Suggested rule: merchant contains “{suggested_keyword}”. "
+                f"It matches {suggestion['count']} uncategorized transactions."
+            )
 
-        st.markdown("**Create a rule from this transaction**")
-        selected_category = st.selectbox(
-            "Rule category",
-            quick_categories,
-            index=quick_categories.index(txn["category"]) if txn["category"] in quick_categories else quick_categories.index("Other"),
-            key=f"quick_category_select_{txn['id']}",
-        )
-        rule_keyword = st.text_input(
-            "Rule keyword",
-            value=_rule_keyword_from_description(txn["description"]),
-            key=f"quick_keyword_{txn['id']}",
-        )
-        apply_existing = st.checkbox(
-            "Apply this rule to existing uncategorized matches",
-            value=True,
-            key=f"quick_apply_{txn['id']}",
-        )
-        rule_cols = st.columns(2)
-        if rule_cols[0].button("Save selected category", key=f"quick_save_{txn['id']}", use_container_width=True):
-            _apply_category(conn, user_id, int(txn["id"]), selected_category)
-            st.rerun()
-        if rule_cols[1].button("Create rule", key=f"quick_rule_{txn['id']}", use_container_width=True):
-            if not rule_keyword.strip():
-                st.error("Rule keyword is required.")
-            else:
-                _create_rule_from_review(
-                    conn,
-                    user_id,
-                    rule_keyword,
-                    selected_category,
-                    apply_existing=apply_existing,
-                )
-                _apply_category(conn, user_id, int(txn["id"]), selected_category)
-                st.rerun()
+        if st.session_state.get(f"quick_rule_open_{transaction_id}"):
+            _render_rule_preview(conn, user_id, txn, selected_category)
 
-    nav_cols = st.columns([1, 1])
-    if nav_cols[0].button("Skip for now", use_container_width=True):
-        _skip_review_transaction(int(txn["id"]))
+
+def _render_rule_preview(conn, user_id: int, txn: dict, selected_category: str) -> None:
+    transaction_id = int(txn["id"])
+    categories = sorted(CATEGORIES)
+    st.markdown("**Rule preview**")
+    rule_col, category_col = st.columns([1.5, 1])
+    keyword = rule_col.text_input(
+        "Merchant text to match",
+        value=_rule_keyword_from_description(txn["description"] or ""),
+        key=f"quick_rule_keyword_{transaction_id}",
+    )
+    rule_category = category_col.selectbox(
+        "Category to assign",
+        categories,
+        index=categories.index(selected_category),
+        key=f"quick_rule_category_{transaction_id}",
+    )
+    preview = _rule_preview(conn, user_id, keyword)
+    account_names = ", ".join(preview["accounts"]) if preview["accounts"] else "None"
+    st.write(f"Matching transactions: **{preview['count']}**")
+    st.write(f"Accounts affected: **{account_names}**")
+    st.caption("Only uncategorized matches will change. Already categorized transactions will not be overwritten.")
+
+    apply_existing = st.checkbox(
+        "Apply this rule to all matching uncategorized transactions",
+        value=True,
+        key=f"quick_rule_apply_{transaction_id}",
+    )
+    action_cols = st.columns([1, 1])
+    if action_cols[0].button("Cancel", key=f"quick_rule_cancel_{transaction_id}", use_container_width=True):
+        st.session_state[f"quick_rule_open_{transaction_id}"] = False
         st.rerun()
-    if nav_cols[1].button("Mark as Other", use_container_width=True):
-        _apply_category(conn, user_id, int(txn["id"]), "Other")
-        _skip_review_transaction(int(txn["id"]))
+    if action_cols[1].button(
+        "Create rule",
+        key=f"quick_rule_create_{transaction_id}",
+        type="primary",
+        use_container_width=True,
+        disabled=not keyword.strip(),
+    ):
+        _create_rule_from_review(
+            conn,
+            user_id,
+            keyword,
+            rule_category,
+            apply_existing=apply_existing,
+        )
+        _apply_category(conn, user_id, transaction_id, rule_category)
+        st.session_state[f"quick_rule_open_{transaction_id}"] = False
         st.rerun()
 
 

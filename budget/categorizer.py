@@ -167,10 +167,11 @@ class CategoryRule:
 
 
 def normalize_text(text: str) -> str:
-    """Strip accents and lowercase for matching (handles French RBC descriptions)."""
+    """Normalize accents, punctuation, and whitespace for reliable rule matching."""
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
-    return text.lower().strip()
+    text = re.sub(r"[^a-z0-9]+", " ", text.lower())
+    return " ".join(text.split())
 
 
 def load_user_rules(conn: sqlite3.Connection, user_id: int) -> list[CategoryRule]:
@@ -233,7 +234,7 @@ def categorize_description(
     normalized = normalize_text(description)
 
     for rule in rules:
-        if rule.keyword in normalized:
+        if normalize_text(rule.keyword) in normalized:
             txn_type = infer_transaction_type(amount, rule.category, description)
             return rule.category, txn_type
 
@@ -296,7 +297,7 @@ def add_user_rule(
 ) -> int:
     """Insert a user-defined category rule."""
 
-    keyword = keyword.strip().lower()
+    keyword = normalize_text(keyword)
     category = category.strip()
     if not keyword or not category:
         raise ValueError("Keyword and category are required.")
