@@ -12,6 +12,9 @@ from shared.onboarding_service import should_force_onboarding
 
 
 def _test_login_enabled() -> bool:
+    environment = os.getenv("FINANCIAL_GPS_ENV", "development").strip().lower()
+    if environment in {"production", "prod"}:
+        return False
     if os.getenv("FINANCIAL_GPS_TEST_LOGIN") == "1":
         return True
     try:

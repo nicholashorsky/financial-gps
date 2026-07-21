@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pandas as pd
 import streamlit as st
 
 from budget.narrator import cpp_delay_message, gis_message
@@ -33,7 +32,7 @@ def render() -> None:
                 cpp_age = st.slider("CPP start age", min_value=60, max_value=70, value=int(benefits.get("CPP", {}).get("elected_start_age") or 65))
                 cpp_preview = previews["cpp_60"] if cpp_age == 60 else previews["cpp_65"] if cpp_age == 65 else previews["cpp_70"]
                 st.metric("CPP monthly preview", f"${cpp_preview.monthly_amount:,.2f}")
-                st.caption(f"Delaying CPP changes the lifetime income profile immediately in the engine.")
+                st.caption("Delaying CPP changes the lifetime income profile immediately in the engine.")
             with right:
                 oas_age = st.slider("OAS start age", min_value=65, max_value=70, value=int(benefits.get("OAS", {}).get("elected_start_age") or 65))
                 oas_preview = previews["oas_65"] if oas_age == 65 else previews["oas_70"]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from fire_engine.engine.projection import ProjectionYear, project_household
+from fire_engine.engine.projection import project_household
 from fire_engine.models.household import Household
 from fire_engine.models.income_source import IncomeSource
 from fire_engine.models.investment_account import InvestmentAccount

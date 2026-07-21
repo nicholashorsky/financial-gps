@@ -34,6 +34,7 @@ class ParseResult:
     warnings: list[str] = field(default_factory=list)
     raw_columns: list[str] = field(default_factory=list)
     needs_column_mapping: bool = False
+    skipped_invalid: int = 0
 
 
 @dataclass
@@ -61,6 +62,7 @@ class ImportResult:
     batch_id: int | None = None
     imported: int = 0
     skipped_duplicates: int = 0
+    skipped_invalid: int = 0
     transfers_matched: int = 0
     bridge_fields_updated: int = 0
     bridge_fields_preserved: int = 0

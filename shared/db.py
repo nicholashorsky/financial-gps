@@ -86,7 +86,18 @@ CREATE TABLE IF NOT EXISTS category_rules (
     category        TEXT NOT NULL,
     priority        INTEGER DEFAULT 0,
     source          TEXT DEFAULT 'user',
+    is_enabled      BOOLEAN DEFAULT 1,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_categories (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    is_default      BOOLEAN DEFAULT 0,
+    is_enabled      BOOLEAN DEFAULT 1,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS goals (
@@ -295,6 +306,7 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     _ensure_column(db, "accounts", "account_number_hint", "TEXT")
     _ensure_column(db, "accounts", "last_imported_at", "DATETIME")
     _ensure_column(db, "transactions", "import_batch_id", "INTEGER REFERENCES import_batches(id)")
+    _ensure_column(db, "category_rules", "is_enabled", "BOOLEAN DEFAULT 1")
     _ensure_unique_account_key_index(db)
     _ensure_unique_import_hash_index(db)
     db.commit()

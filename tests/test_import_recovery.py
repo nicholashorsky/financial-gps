@@ -81,6 +81,20 @@ class ImportRecoveryTests(unittest.TestCase):
         self.assertTrue(any("nothing was imported" in warning.lower() for warning in result.warnings))
         self.assertEqual(list_import_batches(self.conn, self.user_id), [])
 
+    def test_import_result_reports_invalid_rows(self) -> None:
+        csv = (
+            "date,description,amount\n"
+            "not-a-date,Coffee,-5.00\n"
+            "2026-07-02,Payroll,1000.00\n"
+        )
+
+        result, transactions = import_csv_transactions(self.conn, self.user_id, csv, filename="mixed.csv")
+
+        self.assertEqual(result.imported, 1)
+        self.assertEqual(result.skipped_invalid, 1)
+        self.assertEqual(len(transactions), 1)
+        self.assertTrue(any("invalid row" in warning.lower() for warning in result.warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

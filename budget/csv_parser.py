@@ -179,7 +179,15 @@ def _parse_rbc_multi(df: pd.DataFrame) -> ParseResult:
         )
 
     accounts = _build_detected_accounts(account_counts, account_meta)
-    return ParseResult(format_name="rbc_multi", transactions=transactions, accounts=accounts)
+    skipped_invalid = len(df) - len(transactions)
+    warnings = _invalid_row_warnings(skipped_invalid)
+    return ParseResult(
+        format_name="rbc_multi",
+        transactions=transactions,
+        accounts=accounts,
+        warnings=warnings,
+        skipped_invalid=skipped_invalid,
+    )
 
 
 def _parse_rbc_credit_card(df: pd.DataFrame) -> ParseResult:
@@ -228,7 +236,15 @@ def _parse_rbc_credit_card(df: pd.DataFrame) -> ParseResult:
             transaction_count=len(transactions),
         )
     ]
-    return ParseResult(format_name="rbc_credit_card", transactions=transactions, accounts=accounts)
+    skipped_invalid = len(df) - len(transactions)
+    warnings = _invalid_row_warnings(skipped_invalid)
+    return ParseResult(
+        format_name="rbc_credit_card",
+        transactions=transactions,
+        accounts=accounts,
+        warnings=warnings,
+        skipped_invalid=skipped_invalid,
+    )
 
 
 def _parse_generic_simple(df: pd.DataFrame, column_map: dict[str, str] | None = None) -> ParseResult:
@@ -268,7 +284,23 @@ def _parse_generic_simple(df: pd.DataFrame, column_map: dict[str, str] | None = 
             transaction_count=len(transactions),
         )
     ]
-    return ParseResult(format_name="generic_simple", transactions=transactions, accounts=accounts)
+    skipped_invalid = len(df) - len(transactions)
+    warnings = _invalid_row_warnings(skipped_invalid)
+    return ParseResult(
+        format_name="generic_simple",
+        transactions=transactions,
+        accounts=accounts,
+        warnings=warnings,
+        skipped_invalid=skipped_invalid,
+    )
+
+
+def _invalid_row_warnings(invalid_rows: int) -> list[str]:
+    if invalid_rows <= 0:
+        return []
+    return [
+        f"Skipped {invalid_rows} invalid row(s). Each imported row needs a valid date, description, and amount."
+    ]
 
 
 def _guess_simple_columns(df: pd.DataFrame) -> dict[str, str] | None:

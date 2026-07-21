@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 import bcrypt
 
 from shared.db import get_connection, row_to_dict

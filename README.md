@@ -52,6 +52,15 @@ allow_test_login = true
 
 Do not enable this shortcut for a real public test with personal financial data.
 
+### Environment variables
+
+| Variable | Development | Production |
+| --- | --- | --- |
+| `FINANCIAL_GPS_ENV` | `development` (default) | Set to `production` |
+| `FINANCIAL_GPS_TEST_LOGIN` | Set to `1` only for synthetic local testing | Must be unset; production mode ignores it |
+
+Production deployments should store secrets in the hosting provider rather than the repository. When `FINANCIAL_GPS_ENV=production`, the Beta Tester shortcut remains disabled even if its development flag is accidentally present.
+
 ## Development Tools
 
 Install application and development dependencies into the project virtual environment:
@@ -64,6 +73,13 @@ Run Ruff to check the Python source:
 
 ```bash
 .venv/bin/ruff check .
+```
+
+Run tests and coverage:
+
+```bash
+.venv/bin/pytest
+.venv/bin/pytest --cov=. --cov-report=term-missing
 ```
 
 ## Project Structure
@@ -106,6 +122,11 @@ The sample is synthetic test data for product validation. Use it before asking t
 - The current app uses SQLite, which is fine for local development and lightweight demos.
 - For shared testing with persistent multi-user data, move storage to a hosted database such as PostgreSQL or Supabase.
 - A browser refresh resets Streamlit session state, but database-backed data remains.
+- Set `FINANCIAL_GPS_ENV=production` in the deployment environment.
+- Keep Streamlit's CORS and XSRF protections enabled.
+- Back up the database before deployment and before schema changes. For SQLite, stop the app and copy `financial_gps.db` to protected storage.
+- Roll back by restoring the previous application release and its matching database backup.
+- Run `python -m unittest discover -s tests -p 'test*.py'` or `pytest` before deployment.
 
 ## Build Status
 

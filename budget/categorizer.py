@@ -179,7 +179,7 @@ def load_user_rules(conn: sqlite3.Connection, user_id: int) -> list[CategoryRule
         """
         SELECT keyword, category, priority, source
         FROM category_rules
-        WHERE user_id = ?
+        WHERE user_id = ? AND is_enabled = 1
         ORDER BY priority DESC, id ASC
         """,
         (user_id,),
@@ -191,16 +191,16 @@ def load_user_rules(conn: sqlite3.Connection, user_id: int) -> list[CategoryRule
 
 
 def get_all_rules(conn: sqlite3.Connection | None, user_id: int | None) -> list[CategoryRule]:
-    rules = [
-        CategoryRule(keyword=k, category=c, priority=p, source="system")
-        for k, c, p in SYSTEM_KEYWORDS
-    ]
     if conn and user_id:
-        user_rules = load_user_rules(conn, user_id)
+        seed_system_rules(conn, user_id)
+        enabled_categories = set(get_user_categories(conn, user_id))
+        user_rules = [rule for rule in load_user_rules(conn, user_id) if rule.category in enabled_categories]
         # User rules win — prepend with boosted priority
         for ur in user_rules:
-            ur.priority = ur.priority + 1000
-        rules = user_rules + rules
+            if ur.source == "user":
+                ur.priority = ur.priority + 1000
+        return sorted(user_rules, key=lambda r: -r.priority)
+    rules = [CategoryRule(keyword=k, category=c, priority=p, source="system") for k, c, p in SYSTEM_KEYWORDS]
     return sorted(rules, key=lambda r: -r.priority)
 
 
@@ -288,6 +288,100 @@ def seed_system_rules(conn: sqlite3.Connection, user_id: int) -> int:
     return inserted
 
 
+def seed_user_categories(conn: sqlite3.Connection, user_id: int) -> int:
+    inserted = 0
+    for category in CATEGORIES:
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO user_categories (user_id, name, is_default, is_enabled)
+            VALUES (?, ?, 1, 1)
+            """,
+            (user_id, category),
+        )
+        inserted += int(cursor.rowcount or 0)
+    conn.commit()
+    return inserted
+
+
+def list_user_categories(conn: sqlite3.Connection, user_id: int, *, enabled_only: bool = False) -> list[sqlite3.Row]:
+    seed_user_categories(conn, user_id)
+    enabled_filter = "AND is_enabled = 1" if enabled_only else ""
+    return conn.execute(
+        f"""
+        SELECT id, name, is_default, is_enabled
+        FROM user_categories
+        WHERE user_id = ? {enabled_filter}
+        ORDER BY is_default DESC, name ASC
+        """,
+        (user_id,),
+    ).fetchall()
+
+
+def get_user_categories(conn: sqlite3.Connection, user_id: int) -> list[str]:
+    return [str(row["name"]) for row in list_user_categories(conn, user_id, enabled_only=True)]
+
+
+def add_user_category(conn: sqlite3.Connection, user_id: int, name: str) -> int:
+    clean_name = " ".join(name.strip().split())
+    if not clean_name:
+        raise ValueError("Category name is required.")
+    existing = conn.execute(
+        "SELECT id FROM user_categories WHERE user_id = ? AND lower(name) = lower(?)",
+        (user_id, clean_name),
+    ).fetchone()
+    if existing:
+        raise ValueError("That category already exists.")
+    cursor = conn.execute(
+        "INSERT INTO user_categories (user_id, name, is_default, is_enabled) VALUES (?, ?, 0, 1)",
+        (user_id, clean_name),
+    )
+    conn.commit()
+    return int(cursor.lastrowid)
+
+
+def set_category_enabled(conn: sqlite3.Connection, user_id: int, category_id: int, enabled: bool) -> bool:
+    row = conn.execute(
+        "SELECT name FROM user_categories WHERE id = ? AND user_id = ?",
+        (category_id, user_id),
+    ).fetchone()
+    if not row:
+        return False
+    if row["name"] == "Other" and not enabled:
+        raise ValueError("The Other category must remain enabled as a fallback.")
+    conn.execute(
+        "UPDATE user_categories SET is_enabled = ? WHERE id = ? AND user_id = ?",
+        (int(enabled), category_id, user_id),
+    )
+    conn.commit()
+    return True
+
+
+def rename_user_category(conn: sqlite3.Connection, user_id: int, category_id: int, name: str) -> bool:
+    clean_name = " ".join(name.strip().split())
+    if not clean_name:
+        raise ValueError("Category name is required.")
+    row = conn.execute(
+        "SELECT name, is_default FROM user_categories WHERE id = ? AND user_id = ?",
+        (category_id, user_id),
+    ).fetchone()
+    if not row:
+        return False
+    if row["is_default"]:
+        raise ValueError("Default categories can be disabled but not renamed.")
+    in_use = conn.execute(
+        "SELECT COUNT(*) FROM transactions WHERE user_id = ? AND category = ?",
+        (user_id, row["name"]),
+    ).fetchone()[0]
+    if in_use:
+        raise ValueError("This category is in use. Disable it or move its transactions before renaming it.")
+    conn.execute(
+        "UPDATE user_categories SET name = ? WHERE id = ? AND user_id = ?",
+        (clean_name, category_id, user_id),
+    )
+    conn.commit()
+    return True
+
+
 def add_user_rule(
     conn: sqlite3.Connection,
     user_id: int,
@@ -323,16 +417,61 @@ def delete_user_rule(conn: sqlite3.Connection, rule_id: int, user_id: int) -> No
     conn.commit()
 
 
-def list_category_rules(conn: sqlite3.Connection, user_id: int) -> list[tuple[int, str, str, int, str]]:
+def update_user_rule(
+    conn: sqlite3.Connection,
+    rule_id: int,
+    user_id: int,
+    keyword: str,
+    category: str,
+    priority: int,
+) -> bool:
+    clean_keyword = normalize_text(keyword)
+    if not clean_keyword or not category.strip():
+        raise ValueError("Keyword and category are required.")
+    cursor = conn.execute(
+        """
+        UPDATE category_rules SET keyword = ?, category = ?, priority = ?
+        WHERE id = ? AND user_id = ? AND source = 'user'
+        """,
+        (clean_keyword, category.strip(), priority, rule_id, user_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def count_rule_matches(conn: sqlite3.Connection, user_id: int, keyword: str) -> int:
+    normalized_keyword = normalize_text(keyword)
+    if not normalized_keyword:
+        return 0
+    rows = conn.execute(
+        "SELECT description FROM transactions WHERE user_id = ?",
+        (user_id,),
+    ).fetchall()
+    return sum(normalized_keyword in normalize_text(row["description"] or "") for row in rows)
+
+
+def set_rule_enabled(conn: sqlite3.Connection, rule_id: int, user_id: int, enabled: bool) -> bool:
+    cursor = conn.execute(
+        "UPDATE category_rules SET is_enabled = ? WHERE id = ? AND user_id = ?",
+        (int(enabled), rule_id, user_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def list_category_rules(conn: sqlite3.Connection, user_id: int) -> list[tuple[int, str, str, int, str, bool]]:
     """Return category rules for display in the UI."""
 
     rows = conn.execute(
         """
-        SELECT id, keyword, category, priority, source
+        SELECT id, keyword, category, priority, source, is_enabled
         FROM category_rules
         WHERE user_id = ?
         ORDER BY CASE WHEN source = 'user' THEN 0 ELSE 1 END, priority DESC, keyword ASC
         """,
         (user_id,),
     ).fetchall()
-    return [(int(r["id"]), r["keyword"], r["category"], int(r["priority"] or 0), r["source"]) for r in rows]
+    return [
+        (int(r["id"]), r["keyword"], r["category"], int(r["priority"] or 0), r["source"], bool(r["is_enabled"]))
+        for r in rows
+    ]

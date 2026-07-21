@@ -552,7 +552,7 @@ def get_data_quality_warnings(conn: sqlite3.Connection, user_id: int) -> list[Da
     warnings: list[DataQualityWarning] = []
     profile = get_or_create_fire_profile(conn, user_id)
     tfsa = get_or_create_tfsa_state(conn, user_id)
-    rrsp = get_or_create_rrsp_state(conn, user_id)
+    get_or_create_rrsp_state(conn, user_id)
     fhsa = get_or_create_fhsa_state(conn, user_id)
     benefits = {row["benefit_type"]: row for row in list_benefit_enrollments(conn, user_id)}
     accounts = list_investment_accounts(conn, user_id)

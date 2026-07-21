@@ -151,6 +151,7 @@ def import_csv_transactions(
     except Exception as exc:
         return ImportResult(warnings=[f"CSV could not be parsed: {exc}"]), []
     result = ImportResult(warnings=list(parse_result.warnings))
+    result.skipped_invalid = parse_result.skipped_invalid
 
     if parse_result.needs_column_mapping:
         result.warnings.append("Map the CSV columns before importing.")

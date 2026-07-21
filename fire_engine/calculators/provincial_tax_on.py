@@ -7,7 +7,6 @@ from fire_engine.parameters.loader import ResolvedParams, get_params
 
 
 def _health_premium(taxable_income: float, params) -> float:
-    bands = params.ontario_health_premium_bands
     if taxable_income <= 20000:
         return 0.0
     if taxable_income <= 25000:

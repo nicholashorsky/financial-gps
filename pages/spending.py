@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from budget.categorizer import CATEGORIES, add_user_rule, infer_transaction_type, normalize_text
+from budget.categorizer import add_user_rule, get_user_categories, infer_transaction_type, normalize_text
 from budget.csv_parser import parse_csv, preview_csv
 from budget.importer import get_spending_summary, import_csv_transactions, list_import_batches, undo_import_batch
 from budget.narrator import csv_sync_message, spending_message
@@ -665,6 +665,8 @@ def _render_import_section(conn, user_id: int, summary) -> object:
         st.markdown("**Confirm import**")
         st.write(f"File: `{uploaded_file.name}`")
         st.write(f"Parsed transactions: **{len(parsed.transactions)}** · Detected accounts: **{len(account_targets)}**")
+        if parsed.skipped_invalid:
+            st.warning(f"{parsed.skipped_invalid} invalid row(s) will be skipped.")
         st.caption("Duplicates will be skipped. You can undo newly imported rows from Import history.")
 
     import_disabled = not parsed.transactions and column_map is None
@@ -682,8 +684,13 @@ def _render_import_section(conn, user_id: int, summary) -> object:
             st.warning(warning)
 
         st.success(
-            f"Imported {result.imported} transactions, skipped {result.skipped_duplicates} duplicates, and matched {result.transfers_matched} transfer pair(s)."
+            f"Imported {result.imported} transactions, skipped {result.skipped_duplicates} duplicates, "
+            f"rejected {result.skipped_invalid} invalid row(s), and matched {result.transfers_matched} transfer pair(s)."
         )
+        if result.skipped_invalid:
+            st.warning(
+                f"{result.skipped_invalid} row(s) were not imported because the date, description, or amount was invalid."
+            )
         if result.bridge_fields_updated or result.bridge_fields_preserved:
             st.info(csv_sync_message(result.bridge_fields_updated, result.bridge_fields_preserved))
         if result.ghost_accounts:
@@ -805,7 +812,8 @@ def _render_transaction_review(conn, user_id: int) -> None:
     st.subheader("Transaction Review")
     st.caption("A cleanup queue for imported rows, inspired by the kind of review flow personal finance apps make you wish banks had built first.")
 
-    filter_options = ["Needs review", "All", *CATEGORIES]
+    categories = get_user_categories(conn, user_id)
+    filter_options = ["Needs review", "All", *categories]
     accounts = _accounts_frame(conn, user_id)
     account_options = {"All accounts": None}
     if not accounts.empty:
@@ -835,7 +843,7 @@ def _render_transaction_review(conn, user_id: int) -> None:
     )
     if review_mode == "Quick review":
         session_key = f"{filter_choice}|{account_options[account_choice]}|{search.strip().lower()}"
-        _render_quick_review(conn, user_id, transactions, session_key=session_key)
+        _render_quick_review(conn, user_id, transactions, categories, session_key=session_key)
         return
 
     st.caption(f"Showing {len(transactions)} imported transaction(s).")
@@ -847,10 +855,10 @@ def _render_transaction_review(conn, user_id: int) -> None:
             cols[1].write(f"Current category: {txn['category']}")
             cols[2].write(f"Type: {txn.get('transaction_type') or 'expense'}")
 
-            category_index = CATEGORIES.index(txn["category"]) if txn["category"] in CATEGORIES else CATEGORIES.index("Other")
+            category_index = categories.index(txn["category"]) if txn["category"] in categories else categories.index("Other")
             selected_category = st.selectbox(
                 "Category",
-                CATEGORIES,
+                categories,
                 index=category_index,
                 key=f"review_category_{txn['id']}",
             )
@@ -899,6 +907,7 @@ def _render_quick_review(
     conn,
     user_id: int,
     transactions: list[dict],
+    categories: list[str],
     *,
     session_key: str,
 ) -> None:
@@ -944,13 +953,13 @@ def _render_quick_review(
     page_size = len(queue) if page_size_choice == "All" else int(page_size_choice)
     st.caption(f"Showing the oldest {min(page_size, len(queue))} of {len(queue)} remaining transaction(s).")
     for txn in queue[:page_size]:
-        _render_review_card(conn, user_id, txn)
+        _render_review_card(conn, user_id, txn, categories)
 
 
-def _render_review_card(conn, user_id: int, txn: dict) -> None:
+def _render_review_card(conn, user_id: int, txn: dict, categories: list[str]) -> None:
     transaction_id = int(txn["id"])
     amount = float(txn["amount"] or 0)
-    categories = sorted(CATEGORIES)
+    categories = sorted(categories)
     current_category = txn["category"] if txn["category"] in categories else "Other"
     selected_category = st.session_state.get(f"quick_category_{transaction_id}", current_category)
 
@@ -996,12 +1005,18 @@ def _render_review_card(conn, user_id: int, txn: dict) -> None:
             )
 
         if st.session_state.get(f"quick_rule_open_{transaction_id}"):
-            _render_rule_preview(conn, user_id, txn, selected_category)
+            _render_rule_preview(conn, user_id, txn, selected_category, categories)
 
 
-def _render_rule_preview(conn, user_id: int, txn: dict, selected_category: str) -> None:
+def _render_rule_preview(
+    conn,
+    user_id: int,
+    txn: dict,
+    selected_category: str,
+    categories: list[str],
+) -> None:
     transaction_id = int(txn["id"])
-    categories = sorted(CATEGORIES)
+    categories = sorted(categories)
     st.markdown("**Rule preview**")
     rule_col, category_col = st.columns([1.5, 1])
     keyword = rule_col.text_input(
