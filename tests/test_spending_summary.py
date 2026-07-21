@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from budget.importer import get_spending_summary
+from pages.spending import _overview_period_range, _period_overview
 from shared.db import get_connection, init_db
 
 
 class SpendingSummaryTests(unittest.TestCase):
+    def test_last_thirty_days_has_equal_previous_comparison_period(self) -> None:
+        self.assertEqual(
+            _overview_period_range("Last 30 days", date(2026, 7, 20)),
+            ("2026-06-21", "2026-07-21", "2026-05-22", "2026-06-21"),
+        )
+
     def test_transfer_categories_are_visible_but_not_counted_as_spending_or_income(self) -> None:
         temp_db = tempfile.NamedTemporaryFile(delete=False)
         temp_db.close()
@@ -54,6 +62,10 @@ class SpendingSummaryTests(unittest.TestCase):
             self.assertEqual(summary.income_total, 1000.0)
             self.assertEqual([row["category"] for row in summary.spending_by_category], ["Groceries"])
             self.assertEqual(len(summary.recent_transactions), 4)
+            overview = _period_overview(conn, user_id, "Last 30 days", date(2026, 7, 20))
+            self.assertEqual(overview["spending"], 80.0)
+            self.assertEqual(overview["income"], 1000.0)
+            self.assertEqual([row["category"] for row in overview["categories"]], ["Groceries"])
         finally:
             conn.close()
             db_path.unlink(missing_ok=True)

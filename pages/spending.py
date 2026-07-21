@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import re
 from typing import Iterable
 
@@ -60,6 +60,68 @@ def _current_month_range() -> tuple[str, str]:
     return start, end
 
 
+def _overview_period_range(period: str, today: date | None = None) -> tuple[str | None, str | None, str | None, str | None]:
+    today = today or date.today()
+    end = today + timedelta(days=1)
+    if period == "This month":
+        start = today.replace(day=1)
+        days = (end - start).days
+    elif period == "All time":
+        return None, None, None, None
+    else:
+        start = today - timedelta(days=29)
+        days = 30
+    return start.isoformat(), end.isoformat(), (start - timedelta(days=days)).isoformat(), start.isoformat()
+
+
+def _period_overview(conn, user_id: int, period: str, today: date | None = None) -> dict[str, object]:
+    start, end, previous_start, previous_end = _overview_period_range(period, today)
+    date_filter = "" if start is None else "AND date >= ? AND date < ?"
+    params: list[object] = [user_id]
+    if start is not None:
+        params.extend([start, end])
+    row = conn.execute(
+        f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN ABS(amount) ELSE 0 END), 0) AS spending,
+            COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 AND COALESCE(category, '') <> 'Transfer' THEN amount ELSE 0 END), 0) AS income
+        FROM transactions WHERE user_id = ? {date_filter}
+        """,
+        params,
+    ).fetchone()
+    previous_spending: float | None = None
+    if previous_start is not None:
+        previous_spending = float(
+            conn.execute(
+                """
+                SELECT COALESCE(SUM(ABS(amount)), 0) FROM transactions
+                WHERE user_id = ? AND amount < 0 AND is_excluded = 0
+                  AND COALESCE(category, '') <> 'Transfer' AND date >= ? AND date < ?
+                """,
+                (user_id, previous_start, previous_end),
+            ).fetchone()[0]
+        )
+    categories = conn.execute(
+        f"""
+        SELECT COALESCE(category, 'Other') AS category, SUM(ABS(amount)) AS total
+        FROM transactions
+        WHERE user_id = ? AND amount < 0 AND is_excluded = 0
+          AND COALESCE(category, '') <> 'Transfer' {date_filter}
+        GROUP BY category ORDER BY total DESC, category ASC LIMIT 5
+        """,
+        params,
+    ).fetchall()
+    spending = float(row["spending"] or 0)
+    income = float(row["income"] or 0)
+    return {
+        "spending": spending,
+        "income": income,
+        "net": income - spending,
+        "previous_spending": previous_spending,
+        "categories": [dict(category) for category in categories],
+    }
+
+
 def _current_month_summary(conn, user_id: int) -> pd.DataFrame:
     start, end = _current_month_range()
     rows = conn.execute(
@@ -113,6 +175,7 @@ def _accounts_frame(conn, user_id: int) -> pd.DataFrame:
             a.id,
             a.name,
             a.type,
+            a.balance,
             a.account_number_hint,
             a.last_imported_at,
             MAX(t.date) AS last_transaction_date,
@@ -200,6 +263,10 @@ def _review_transactions(
 def _format_money(value: float) -> str:
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.2f}"
+
+
+def _navigate_spending(section: str) -> None:
+    st.session_state.spending_section = section
 
 
 def _keyword_hint(description: str) -> str:
@@ -427,8 +494,17 @@ def _render_workbench_header(conn, user_id: int, summary) -> None:
 def _render_review_banner(stats: dict[str, float | int]) -> None:
     review_count = int(stats["review_count"])
     if review_count > 0:
-        st.error(f"Let's review some transactions\n\n{review_count} remaining")
-        st.caption("Open the Transactions tab to categorize them or create rules.")
+        with st.container(border=True):
+            message_col, action_col = st.columns([4, 1.2])
+            message_col.subheader(f"{review_count} transactions need your attention")
+            message_col.caption("Review uncertain categories before relying on your spending totals.")
+            action_col.button(
+                "Review transactions",
+                type="primary",
+                use_container_width=True,
+                on_click=_navigate_spending,
+                args=("Transactions",),
+            )
         return
     st.success("Transaction review is clear. The numbers are allowed to be smug for a moment.")
 
@@ -439,7 +515,7 @@ def _render_recent_transaction_list(conn, user_id: int, limit: int = 8) -> None:
         SELECT t.date, t.description, t.amount, COALESCE(t.category, 'Other') AS category, a.name AS account_name
         FROM transactions t
         LEFT JOIN accounts a ON a.id = t.account_id
-        WHERE t.user_id = ? AND t.is_excluded = 0
+        WHERE t.user_id = ?
         ORDER BY t.date DESC, t.id DESC
         LIMIT ?
         """,
@@ -451,11 +527,12 @@ def _render_recent_transaction_list(conn, user_id: int, limit: int = 8) -> None:
 
     for row in rows:
         amount = float(row["amount"] or 0)
-        cols = st.columns([0.45, 2.2, 1, 1])
+        cols = st.columns([0.55, 2.1, 1.2, 1, 0.9])
         cols[0].caption(row["date"])
         cols[1].write(row["description"] or "Transaction")
-        cols[2].caption(row["category"])
-        cols[3].write(_format_money(amount))
+        cols[2].caption(row["account_name"] or "Unassigned")
+        cols[3].caption(row["category"])
+        cols[4].write(_format_money(amount))
 
 
 def _render_top_accounts(accounts: pd.DataFrame, limit: int = 4) -> None:
@@ -464,20 +541,30 @@ def _render_top_accounts(accounts: pd.DataFrame, limit: int = 4) -> None:
         return
     top_accounts = accounts.sort_values("transaction_count", ascending=False).head(limit)
     for _, row in top_accounts.iterrows():
-        cols = st.columns([1.6, 0.8, 0.8])
-        cols[0].write(row["name"])
-        cols[1].caption(str(row["type"]).title())
-        cols[2].write(_format_money(float(row["net_flow"] or 0)))
+        with st.container(border=True):
+            cols = st.columns([0.45, 2, 1])
+            cols[0].markdown(f"### {str(row['name'])[:3].upper()}")
+            cols[1].write(row["name"])
+            updated = row["last_transaction_date"] or "No transactions"
+            cols[1].caption(f"{str(row['type']).title()} · Updated {updated} · {int(row['transaction_count'])} transactions")
+            cols[1].caption("Included in totals")
+            balance = float(row["balance"] or 0)
+            cols[2].write(_format_money(balance))
+            cols[2].caption(f"{_format_money(float(row['net_flow'] or 0))} net flow")
 
 
-def _render_category_snapshot(summary, limit: int = 5) -> None:
-    if not summary.spending_by_category:
+def _render_category_snapshot(period_data: dict[str, object]) -> None:
+    categories = period_data["categories"]
+    if not categories:
         st.info("Category totals will appear after imports are categorized.")
         return
-    rows = []
-    for row in summary.spending_by_category[:limit]:
-        rows.append({"Category": row["category"] or "Other", "Spending": _format_money(float(row["total"] or 0))})
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    spending = float(period_data["spending"] or 0)
+    for row in categories:
+        total = float(row["total"] or 0)
+        cols = st.columns([3, 1])
+        cols[0].write(row["category"] or "Other")
+        cols[1].write(_format_money(total))
+        st.progress(total / spending if spending else 0)
 
 
 def _render_overview_section(conn, user_id: int, summary) -> None:
@@ -489,14 +576,29 @@ def _render_overview_section(conn, user_id: int, summary) -> None:
     st.divider()
     left, right = st.columns([1, 1])
     with left:
-        st.subheader("Top Accounts")
+        heading, action = st.columns([3, 1])
+        heading.subheader("Accounts")
+        action.button("Manage", use_container_width=True, on_click=_navigate_spending, args=("Accounts",))
         _render_top_accounts(accounts)
     with right:
-        st.subheader("Spending Snapshot")
-        _render_category_snapshot(summary)
+        heading, selector = st.columns([2, 1.2])
+        heading.subheader("Spending overview")
+        period = selector.selectbox("Period", ["Last 30 days", "This month", "All time"], label_visibility="collapsed")
+        period_data = _period_overview(conn, user_id, period)
+        previous = period_data["previous_spending"]
+        delta = None
+        if previous:
+            delta = f"{((float(period_data['spending']) - float(previous)) / float(previous)) * 100:+.1f}% vs previous period"
+        st.metric("Total spent", _format_money(float(period_data["spending"])), delta=delta, delta_color="inverse")
+        metrics = st.columns(2)
+        metrics[0].metric("Income", _format_money(float(period_data["income"])))
+        metrics[1].metric("Net flow", _format_money(float(period_data["net"])))
+        _render_category_snapshot(period_data)
 
     st.divider()
-    st.subheader("Transactions")
+    heading, action = st.columns([3, 1])
+    heading.subheader("Recent transactions")
+    action.button("View all", use_container_width=True, on_click=_navigate_spending, args=("Transactions",))
     _render_recent_transaction_list(conn, user_id)
 
 
@@ -897,30 +999,38 @@ def _render_rule_preview(conn, user_id: int, txn: dict, selected_category: str) 
 
 
 def render() -> None:
-    st.title("Spending")
-    st.caption("Track accounts, import CSVs, and clean up the transaction categories that rules could not infer.")
-
     user = st.session_state.get("user")
     if not user:
         st.info("Log in to import transactions and review spending.")
         return
 
+    header, action = st.columns([4, 1])
+    header.title("Spending")
+    header.caption("Understand where your money goes and clean up imported transactions.")
+    action.button(
+        "Import CSV",
+        type="primary",
+        use_container_width=True,
+        on_click=_navigate_spending,
+        args=("Import",),
+    )
+
+    sections = ["Overview", "Accounts", "Transactions", "Cash Flow", "Import"]
+    if st.session_state.get("spending_section") not in sections:
+        st.session_state.spending_section = "Overview"
+    section = st.segmented_control("Spending section", sections, key="spending_section", label_visibility="collapsed")
+
     user_id = int(user["id"])
     conn = get_connection()
     try:
         summary = get_spending_summary(conn, user_id)
-        _render_workbench_header(conn, user_id, summary)
-
-        tab_overview, tab_accounts, tab_transactions, tab_cash_flow, tab_import = st.tabs(
-            ["Overview", "Accounts", "Transactions", "Cash Flow", "Import"]
-        )
-        with tab_overview:
+        if section == "Overview":
             _render_overview_section(conn, user_id, summary)
-        with tab_accounts:
+        elif section == "Accounts":
             _render_accounts_section(conn, user_id)
-        with tab_transactions:
+        elif section == "Transactions":
             _render_transaction_review(conn, user_id)
-        with tab_cash_flow:
+        elif section == "Cash Flow":
             left, right = st.columns([1.1, 0.9])
             with left:
                 st.subheader("Spending by Category")
@@ -937,7 +1047,7 @@ def render() -> None:
                 else:
                     for description, occurrences, total in subscriptions:
                         st.write(f"{description} - {occurrences} hits, ${total:,.2f}")
-        with tab_import:
+        elif section == "Import":
             summary = _render_import_section(conn, user_id, summary)
     finally:
         conn.close()
