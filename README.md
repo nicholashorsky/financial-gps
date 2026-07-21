@@ -138,4 +138,13 @@ The sample is synthetic test data for product validation. Use it before asking t
 
 **Current:** Phase 8 — Beta hardening, sample-data smoke tests, and deployment validation
 
-See `financial_gps_unified_spec.md` for the full product spec and build plan.
+Project documentation:
+
+- [Project vision](docs/PROJECT_VISION.md)
+- [Current status](docs/CURRENT_STATUS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Decision log](docs/DECISIONS.md)
+- [GitHub Issues](https://github.com/nicholashorsky/financial-gps/issues)
+- [Financial GPS Development project](https://github.com/users/nicholashorsky/projects/1)
+
+Historical specifications and beta notes are preserved in `docs/archive/`.
