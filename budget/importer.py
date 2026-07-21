@@ -95,11 +95,12 @@ def _insert_transaction(
     user_id: int,
     account_id: int,
     txn: CategorizedTransaction,
+    import_batch_id: int,
 ) -> tuple[int, bool]:
     import_hash = make_import_hash(account_id, txn.date, txn.amount, txn.description)
     existing = conn.execute(
-        "SELECT id FROM transactions WHERE import_hash = ?",
-        (import_hash,),
+        "SELECT id FROM transactions WHERE import_hash = ? AND user_id = ?",
+        (import_hash, user_id),
     ).fetchone()
     if existing:
         return int(existing["id"]), False
@@ -109,9 +110,9 @@ def _insert_transaction(
         INSERT INTO transactions (
             user_id, account_id, date, description, amount, category,
             transaction_type, is_recurring, is_excluded, source,
-            raw_description, import_hash
+            raw_description, import_hash, import_batch_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 'csv_import', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 'csv_import', ?, ?, ?)
         """,
         (
             user_id,
@@ -123,6 +124,7 @@ def _insert_transaction(
             txn.transaction_type,
             txn.raw_description,
             import_hash,
+            import_batch_id,
         ),
     )
     return int(cursor.lastrowid), True
@@ -135,6 +137,7 @@ def import_csv_transactions(
     *,
     column_map: dict[str, str] | None = None,
     account_name_overrides: Mapping[str, str] | None = None,
+    filename: str = "Uploaded CSV",
 ) -> tuple[ImportResult, list[CategorizedTransaction]]:
     """
     Parse, categorize, detect transfers, and persist imported transactions.
@@ -143,12 +146,25 @@ def import_csv_transactions(
     """
 
     account_name_overrides = dict(account_name_overrides or {})
-    parse_result = parse_csv(content, column_map=column_map)
+    try:
+        parse_result = parse_csv(content, column_map=column_map)
+    except Exception as exc:
+        return ImportResult(warnings=[f"CSV could not be parsed: {exc}"]), []
     result = ImportResult(warnings=list(parse_result.warnings))
 
     if parse_result.needs_column_mapping:
         result.warnings.append("Map the CSV columns before importing.")
         return result, []
+    if not parse_result.transactions:
+        result.warnings.append("No valid transactions were found, so nothing was imported.")
+        return result, []
+
+    batch_cursor = conn.execute(
+        "INSERT INTO import_batches (user_id, filename, format_name) VALUES (?, ?, ?)",
+        (user_id, filename, parse_result.format_name),
+    )
+    batch_id = int(batch_cursor.lastrowid)
+    result.batch_id = batch_id
 
     categorized = categorize_transactions(parse_result.transactions, conn=conn, user_id=user_id)
     account_types = {
@@ -179,7 +195,7 @@ def import_csv_transactions(
             inserted_ids.append(None)
             continue
 
-        inserted_id, is_new = _insert_transaction(conn, user_id, account_id, txn)
+        inserted_id, is_new = _insert_transaction(conn, user_id, account_id, txn, batch_id)
         inserted_ids.append(inserted_id)
         if is_new:
             imported_count += 1
@@ -218,6 +234,15 @@ def import_csv_transactions(
     result.skipped_duplicates = skipped_duplicates
     result.transfers_matched = transfers_matched
     result.ghost_accounts = ghost_accounts
+    conn.execute(
+        """
+        UPDATE import_batches
+        SET imported_count = ?, duplicate_count = ?, transfer_count = ?
+        WHERE id = ? AND user_id = ?
+        """,
+        (imported_count, skipped_duplicates, transfers_matched, batch_id, user_id),
+    )
+    conn.commit()
     if ghost_accounts:
         result.warnings.append(
             f"Detected {len(ghost_accounts)} new account(s). Review the suggested names before the next import."
@@ -232,6 +257,51 @@ def import_csv_transactions(
     except Exception as exc:  # pragma: no cover - bridge is best-effort for imports
         result.warnings.append(f"Bridge sync skipped: {exc}")
     return result, categorized
+
+
+def list_import_batches(conn: sqlite3.Connection, user_id: int, limit: int = 10) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT id, filename, format_name, imported_count, duplicate_count,
+               transfer_count, created_at, undone_at
+        FROM import_batches
+        WHERE user_id = ?
+        ORDER BY id DESC LIMIT ?
+        """,
+        (user_id, limit),
+    ).fetchall()
+
+
+def undo_import_batch(conn: sqlite3.Connection, user_id: int, batch_id: int) -> int:
+    batch = conn.execute(
+        "SELECT id, undone_at FROM import_batches WHERE id = ? AND user_id = ?",
+        (batch_id, user_id),
+    ).fetchone()
+    if not batch or batch["undone_at"]:
+        return 0
+    ids = [
+        int(row["id"])
+        for row in conn.execute(
+            "SELECT id FROM transactions WHERE import_batch_id = ? AND user_id = ?",
+            (batch_id, user_id),
+        ).fetchall()
+    ]
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        conn.execute(
+            f"UPDATE transactions SET transfer_match_id = NULL WHERE user_id = ? AND transfer_match_id IN ({placeholders})",
+            (user_id, *ids),
+        )
+    deleted = conn.execute(
+        "DELETE FROM transactions WHERE import_batch_id = ? AND user_id = ?",
+        (batch_id, user_id),
+    ).rowcount
+    conn.execute(
+        "UPDATE import_batches SET undone_at = ? WHERE id = ? AND user_id = ?",
+        (utc_now_iso(), batch_id, user_id),
+    )
+    conn.commit()
+    return int(deleted)
 
 
 def get_spending_summary(conn: sqlite3.Connection, user_id: int, limit: int = 10) -> ImportSummary:

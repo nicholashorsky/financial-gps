@@ -10,7 +10,10 @@ from budget.importer import get_spending_summary
 from budget.narrator import fire_date_message, home_message, no_goals_message
 from shared.db import get_connection
 from shared.fire_service import estimate_fire_date
+from shared.formatting import format_currency, format_month
 from shared.onboarding_service import get_onboarding_status
+from shared.theme import INCOME, SPENDING, style_figure
+from shared.ui import empty_state, page_header
 
 
 def _goal_stats(conn, user_id: int) -> tuple[int, float, float, list[dict]]:
@@ -46,8 +49,7 @@ def _monthly_sparkline(conn, user_id: int) -> pd.DataFrame:
 
 
 def render() -> None:
-    st.title("Home")
-    st.caption("A quick read on where things stand before we get fancier.")
+    page_header("Home", "A quick read on where things stand before we get fancier.")
 
     user = st.session_state.get("user")
     if not user:
@@ -81,15 +83,16 @@ def render() -> None:
         cols = st.columns(5)
         cols[0].metric("Transactions", summary.transaction_count)
         cols[1].metric("Savings rate", f"{savings_rate:.1%}")
-        cols[2].metric("Monthly surplus", f"${summary.income_total - summary.spending_total:,.2f}")
+        cols[2].metric("Monthly surplus", format_currency(summary.income_total - summary.spending_total))
         cols[3].metric("Months to next goal", months_to_next_goal if months_to_next_goal is not None else "n/a")
         cols[4].metric("FIRE date", fire_year if fire_year is not None else "n/a")
 
         if summary.transaction_count == 0:
-            st.info("No CSV has been imported yet. Open Spending to load bank data and wake up the dashboards.")
-            if st.button("Go to Onboarding", use_container_width=True):
-                st.session_state.page = "Onboarding"
-                st.rerun()
+            empty_state(
+                "No CSV has been imported yet. Open Spending to load bank data and wake up the dashboards.",
+                action_label="Go to Onboarding",
+                on_action=lambda: setattr(st.session_state, "page", "Onboarding"),
+            )
             return
 
         st.divider()
@@ -101,13 +104,11 @@ def render() -> None:
                 st.info("Monthly trend appears after a few imports.")
             else:
                 figure = go.Figure()
-                figure.add_trace(go.Scatter(x=spark["month"], y=spark["income"], name="Income", mode="lines+markers"))
-                figure.add_trace(go.Scatter(x=spark["month"], y=spark["spending"], name="Spending", mode="lines+markers"))
-                figure.update_layout(
-                    height=320,
-                    margin=dict(l=20, r=20, t=20, b=20),
-                    legend_title_text="",
-                )
+                month_labels = [format_month(month) for month in spark["month"]]
+                figure.add_trace(go.Scatter(x=month_labels, y=spark["income"], name="Income", mode="lines+markers", line_color=INCOME))
+                figure.add_trace(go.Scatter(x=month_labels, y=spark["spending"], name="Spending", mode="lines+markers", line_color=SPENDING))
+                style_figure(figure)
+                figure.update_xaxes(type="category")
                 st.plotly_chart(figure, use_container_width=True)
 
         with right:
@@ -117,7 +118,7 @@ def render() -> None:
                 top_category = summary.spending_by_category[0]["category"]
             st.info(home_message(summary.transaction_count, goal_count))
             st.caption(
-                f"Tracked goals: {goal_count} | Goal capital: ${total_current:,.2f} / ${total_target:,.2f}"
+                f"Tracked goals: {goal_count} | Goal capital: {format_currency(total_current)} / {format_currency(total_target)}"
             )
             st.caption(
                 f"Setup progress: {onboarding['complete_count']} of {len(onboarding['steps'])} core steps complete"

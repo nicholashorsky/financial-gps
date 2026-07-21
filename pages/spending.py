@@ -12,9 +12,12 @@ import streamlit as st
 
 from budget.categorizer import CATEGORIES, add_user_rule, infer_transaction_type, normalize_text
 from budget.csv_parser import parse_csv, preview_csv
-from budget.importer import get_spending_summary, import_csv_transactions
+from budget.importer import get_spending_summary, import_csv_transactions, list_import_batches, undo_import_batch
 from budget.narrator import csv_sync_message, spending_message
 from shared.db import get_connection
+from shared.formatting import format_currency as _format_money, format_date, format_month
+from shared.theme import INCOME, SPENDING, style_figure
+from shared.ui import page_header
 
 
 UNREVIEWED_SQL = "COALESCE(category, 'Uncategorized') IN ('', 'Uncategorized')"
@@ -260,11 +263,6 @@ def _review_transactions(
     return [dict(row) for row in rows]
 
 
-def _format_money(value: float) -> str:
-    sign = "-" if value < 0 else ""
-    return f"{sign}${abs(value):,.2f}"
-
-
 def _navigate_spending(section: str) -> None:
     st.session_state.spending_section = section
 
@@ -434,6 +432,7 @@ def _render_category_chart(summary) -> None:
     totals = [float(row["total"] or 0) for row in summary.spending_by_category]
     figure = go.Figure(data=[go.Pie(labels=categories, values=totals, hole=0.45)])
     figure.update_layout(title="Current Month Spending Mix", height=340, margin=dict(l=20, r=20, t=40, b=20))
+    style_figure(figure, height=340)
     st.plotly_chart(figure, use_container_width=True)
 
 
@@ -444,14 +443,17 @@ def _render_monthly_trend(conn, user_id: int) -> None:
         return
 
     figure = go.Figure()
-    figure.add_trace(go.Bar(x=trend["month"], y=trend["spending"], name="Spending", marker_color="#dc2626"))
-    figure.add_trace(go.Bar(x=trend["month"], y=trend["income"], name="Income", marker_color="#0f766e"))
+    month_labels = [format_month(month) for month in trend["month"]]
+    figure.add_trace(go.Bar(x=month_labels, y=trend["spending"], name="Spending", marker_color=SPENDING))
+    figure.add_trace(go.Bar(x=month_labels, y=trend["income"], name="Income", marker_color=INCOME))
     figure.update_layout(
         barmode="group",
         title="Monthly Trend",
         height=320,
         margin=dict(l=20, r=20, t=40, b=20),
     )
+    style_figure(figure)
+    figure.update_xaxes(type="category")
     st.plotly_chart(figure, use_container_width=True)
 
 
@@ -528,7 +530,7 @@ def _render_recent_transaction_list(conn, user_id: int, limit: int = 8) -> None:
     for row in rows:
         amount = float(row["amount"] or 0)
         cols = st.columns([0.55, 2.1, 1.2, 1, 0.9])
-        cols[0].caption(row["date"])
+        cols[0].caption(format_date(row["date"]))
         cols[1].write(row["description"] or "Transaction")
         cols[2].caption(row["account_name"] or "Unassigned")
         cols[3].caption(row["category"])
@@ -545,7 +547,7 @@ def _render_top_accounts(accounts: pd.DataFrame, limit: int = 4) -> None:
             cols = st.columns([0.45, 2, 1])
             cols[0].markdown(f"### {str(row['name'])[:3].upper()}")
             cols[1].write(row["name"])
-            updated = row["last_transaction_date"] or "No transactions"
+            updated = format_date(row["last_transaction_date"], fallback="Never")
             cols[1].caption(f"{str(row['type']).title()} · Updated {updated} · {int(row['transaction_count'])} transactions")
             cols[1].caption("Included in totals")
             balance = float(row["balance"] or 0)
@@ -604,14 +606,19 @@ def _render_overview_section(conn, user_id: int, summary) -> None:
 
 def _render_import_section(conn, user_id: int, summary) -> object:
     st.subheader("CSV Import")
+    _render_import_history(conn, user_id)
     uploaded_file = st.file_uploader("Upload an RBC CSV export", type=["csv"], key="spending_csv_upload")
     if uploaded_file is None:
         st.caption("Use the sample CSV for beta testing, then switch to real exports when you trust the flow.")
         return summary
 
     file_bytes = uploaded_file.getvalue()
-    parsed = parse_csv(file_bytes)
-    preview = preview_csv(file_bytes)
+    try:
+        parsed = parse_csv(file_bytes)
+        preview = preview_csv(file_bytes)
+    except Exception as exc:
+        st.error(f"This CSV could not be read: {exc}")
+        return summary
 
     if parsed.warnings:
         for warning in parsed.warnings:
@@ -654,13 +661,21 @@ def _render_import_section(conn, user_id: int, summary) -> object:
             key=f"account_name_{account.key}",
         )
 
-    if st.button("Import transactions", type="primary", use_container_width=True):
+    with st.container(border=True):
+        st.markdown("**Confirm import**")
+        st.write(f"File: `{uploaded_file.name}`")
+        st.write(f"Parsed transactions: **{len(parsed.transactions)}** · Detected accounts: **{len(account_targets)}**")
+        st.caption("Duplicates will be skipped. You can undo newly imported rows from Import history.")
+
+    import_disabled = not parsed.transactions and column_map is None
+    if st.button("Confirm and import", type="primary", use_container_width=True, disabled=import_disabled):
         result, categorized = import_csv_transactions(
             conn,
             user_id,
             file_bytes,
             column_map=column_map,
             account_name_overrides=account_name_overrides,
+            filename=uploaded_file.name,
         )
 
         for warning in result.warnings:
@@ -695,6 +710,42 @@ def _render_import_section(conn, user_id: int, summary) -> object:
 
         return get_spending_summary(conn, user_id)
     return summary
+
+
+def _render_import_history(conn, user_id: int) -> None:
+    batches = list_import_batches(conn, user_id)
+    with st.expander("Import history", expanded=False):
+        if not batches:
+            st.caption("Completed imports will appear here.")
+            return
+        for batch in batches:
+            with st.container(border=True):
+                cols = st.columns([2.2, 1, 1, 1])
+                cols[0].write(batch["filename"])
+                cols[0].caption(f"{batch['created_at']} · {batch['format_name']}")
+                cols[1].metric("Imported", int(batch["imported_count"] or 0))
+                cols[2].metric("Duplicates", int(batch["duplicate_count"] or 0))
+                cols[3].metric("Transfers", int(batch["transfer_count"] or 0))
+                if batch["undone_at"]:
+                    st.caption(f"Undone {batch['undone_at']}")
+                    continue
+                batch_id = int(batch["id"])
+                confirm_key = f"confirm_undo_import_{batch_id}"
+                if not st.session_state.get(confirm_key):
+                    if st.button("Undo this import", key=f"undo_import_{batch_id}"):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+                else:
+                    st.warning("This removes only transactions newly added by this import. Accounts and duplicate rows are preserved.")
+                    actions = st.columns(2)
+                    if actions[0].button("Cancel", key=f"cancel_undo_{batch_id}", use_container_width=True):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+                    if actions[1].button("Confirm undo", key=f"confirm_undo_{batch_id}", type="primary", use_container_width=True):
+                        deleted = undo_import_batch(conn, user_id, batch_id)
+                        st.session_state[confirm_key] = False
+                        st.success(f"Removed {deleted} transaction(s) from this import.")
+                        st.rerun()
 
 
 def _render_accounts_section(conn, user_id: int) -> None:
@@ -1004,15 +1055,11 @@ def render() -> None:
         st.info("Log in to import transactions and review spending.")
         return
 
-    header, action = st.columns([4, 1])
-    header.title("Spending")
-    header.caption("Understand where your money goes and clean up imported transactions.")
-    action.button(
-        "Import CSV",
-        type="primary",
-        use_container_width=True,
-        on_click=_navigate_spending,
-        args=("Import",),
+    page_header(
+        "Spending",
+        "Understand where your money goes and clean up imported transactions.",
+        action_label="Import CSV",
+        on_action=lambda: _navigate_spending("Import"),
     )
 
     sections = ["Overview", "Accounts", "Transactions", "Cash Flow", "Import"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pandas as pd
@@ -51,8 +51,6 @@ def _normalize_columns(cols: list[str]) -> list[str]:
 
 
 def _parse_date(value: Any) -> date | None:
-    from datetime import date
-
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     if isinstance(value, datetime):
@@ -121,7 +119,10 @@ def _read_csv(content: bytes | str) -> pd.DataFrame:
     else:
         text = content
 
-    df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+    try:
+        df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
@@ -345,8 +346,6 @@ def preview_csv(content: bytes | str, max_rows: int = 10) -> pd.DataFrame:
 
 
 def make_import_hash(account_id: int, txn_date: date, amount: float, description: str) -> str:
-    from datetime import date as date_type
-
-    d = txn_date.isoformat() if isinstance(txn_date, date_type) else str(txn_date)
+    d = txn_date.isoformat() if isinstance(txn_date, date) else str(txn_date)
     payload = f"{account_id}|{d}|{amount:.2f}|{description.strip().lower()}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

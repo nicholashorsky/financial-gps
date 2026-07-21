@@ -58,6 +58,7 @@ class TransferMatch:
 
 @dataclass
 class ImportResult:
+    batch_id: int | None = None
     imported: int = 0
     skipped_duplicates: int = 0
     transfers_matched: int = 0

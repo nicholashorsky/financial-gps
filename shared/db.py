@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS import_batches (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename            TEXT NOT NULL,
+    format_name         TEXT NOT NULL,
+    imported_count      INTEGER DEFAULT 0,
+    duplicate_count     INTEGER DEFAULT 0,
+    transfer_count      INTEGER DEFAULT 0,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    undone_at           DATETIME
+);
+
 CREATE TABLE IF NOT EXISTS category_rules (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -282,6 +294,7 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     _ensure_column(db, "accounts", "account_key", "TEXT")
     _ensure_column(db, "accounts", "account_number_hint", "TEXT")
     _ensure_column(db, "accounts", "last_imported_at", "DATETIME")
+    _ensure_column(db, "transactions", "import_batch_id", "INTEGER REFERENCES import_batches(id)")
     _ensure_unique_account_key_index(db)
     _ensure_unique_import_hash_index(db)
     db.commit()
