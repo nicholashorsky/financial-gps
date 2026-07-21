@@ -37,6 +37,24 @@ A successful Streamlit implementation should resemble the mockups in:
 
 It does not need to reproduce every exact shadow, border radius, animation, hover effect, or spacing measurement.
 
+## Progress Snapshot — July 21, 2026
+
+The focused P0–P5 beta-polish work has been implemented and manually reviewed. The application remains a Streamlit application and the polish work deliberately favors stable native components and small shared helpers over fragile, page-specific CSS.
+
+Completed outcomes include:
+
+* **Transaction review (P0):** explicit category saving, full-queue progress, configurable review batch sizes, skip guidance, rule previews, and normalized merchant matching.
+* **Spending overview and reporting:** a clearer overview hierarchy, period selection and comparison, readable account/category/transaction presentation, corrected monthly chart labels, and transfers excluded from spending and income summaries.
+* **Shared presentation:** centralized currency and date formatting plus reusable theme and UI helpers.
+* **Import reliability and recovery:** duplicate-safe imports, updated-export handling, invalid-row reporting, import batch history, user-isolated undo, and clear import results.
+* **Settings and preferences (P5):** user-created rule editing, per-user system-rule controls, and user-specific category management with the existing categories retained as defaults.
+* **Development and deployment safeguards:** Ruff development tooling, documented environment flags, a convenient development launcher, and production-safe development-login behavior.
+* **Automated beta workflow:** an isolated Streamlit smoke test exercises development login, the RBC sample import, transfer matching, and all primary sidebar pages without touching the developer's normal database.
+
+Current automated verification: **52 tests and 13 Streamlit navigation subtests pass; Ruff reports no issues.**
+
+The next work is beta-exit validation rather than another UI-polish phase. Remaining items include clean-environment deployment verification, production database migration and migration tooling, backup/restore and rollback procedures, and final multi-user security validation before real financial data is accepted.
+
 ---
 
 # 1. Spending Overview Review
@@ -652,6 +670,16 @@ Hosted Beta
 ---
 
 # 11. Recommended Implementation Order
+
+The implementation phases below are retained as the original plan. Their current status is:
+
+| Original phase | Status | Result |
+| --- | --- | --- |
+| Phase 1: Spending Overview | Complete | Overview hierarchy, reporting periods, account/category summaries, transaction presentation, and transfer-safe totals are implemented. |
+| Phase 2: Transaction Review | Complete | The P0 review workflow and subsequent merchant-rule corrections are implemented and approved. |
+| Phase 3: Shared UI | Complete | Shared formatting, theme, and UI helpers are in use without extensive fragile CSS. |
+| Phase 4: Reliability | Complete for current SQLite beta scope | Import, isolation, categorization, reporting-boundary, transfer, and recovery tests are present. |
+| Phase 5: Deployment Readiness | In progress | Login safeguards, environment documentation, dev-container improvements, and the primary workflow smoke test are present; managed PostgreSQL, migrations, backups, and deployment rollback verification remain. |
 
 ## Phase 1: Spending Overview
 

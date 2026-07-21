@@ -11,13 +11,13 @@ This document records hands-on beta observations that should remain visible duri
 - Review progress must count the complete matching queue rather than only the first 50 transactions.
 - Quick Review should not be fixed to three cards. Users can select 10, 25, 50, 100, or all remaining transactions.
 
-## Rules and Categories — Deferred
+## Rules and Categories — Addressed in P5
 
-- User-created categorization rules should be editable from Settings, not only listed or deleted.
-- Users should be able to disable system categorization rules.
-- Categories should be manageable from Settings.
-- The current category set should remain the default for new users.
-- User category changes must remain user-specific and preserve user isolation.
+- User-created categorization rules are editable from Settings, not only listed or deleted.
+- Users can disable system categorization rules for their own account.
+- Categories can be managed from Settings.
+- The original category set remains the default for new users.
+- Category and system-rule preferences are user-specific and covered by isolation tests.
 
 ## Spending Reporting — Addressed During P0 Review
 
@@ -32,4 +32,10 @@ This document records hands-on beta observations that should remain visible duri
 
 ## Scope Note
 
-The deferred observations above were intentionally not included in the P0 transaction-review implementation. They should be considered when planning Settings, Spending Overview/reporting correctness, and future investment-account work.
+The Settings observations were intentionally left out of P0 and were completed in P5. Investment-account support and reconciliation of transfers involving accounts that have not yet been imported remain future work.
+
+## Beta Exit Validation — In Progress
+
+- The primary Streamlit workflow now has an automated smoke test using a disposable database.
+- The smoke test covers development login, onboarding, the checked-in RBC sample import, transfer matching, and every primary sidebar page.
+- The next validation work is clean-environment deployment testing, followed by production database migration and operational readiness.
