@@ -2,6 +2,8 @@
 
 These documents preserve research conducted against external budgeting and financial-planning projects. They are reference material, not Financial GPS specifications. Product requirements and implementation work remain tracked in the active project documentation and GitHub Issues.
 
+The cross-project conclusions and their current decision status are summarized in [External Project Audit Findings](../PROJECT_AUDIT_FINDINGS.md).
+
 ## Audit index
 
 | Audit | Primary use for Financial GPS | Reuse boundary |

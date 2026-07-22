@@ -2,6 +2,16 @@
 
 This log records durable product and technical decisions. Open questions belong in GitHub Issues.
 
+## 2026-07-22 — External projects remain research references
+
+**Decision:** Financial GPS remains the primary Python and Streamlit codebase. Actual Budget, ProjectionLab, Ignidash, and Retire, Eh? are research references rather than fork targets or runtime dependencies. ProjectionLab concepts must be implemented through clean-room work, and Ignidash code must not be incorporated without an explicit AGPL-compatible licensing decision. Canadian calculations continue to be implemented and verified from authoritative public sources.
+
+**Reasoning:** The audits contain valuable transaction, planning, snapshot, simulation, and testing patterns, but adopting another product would introduce incompatible technology, product scope, licensing, or financial-model assumptions.
+
+**Tradeoffs:** Financial GPS cannot inherit mature functionality automatically and must implement selected concepts independently. This preserves control of the architecture, licensing boundary, Canadian logic, and existing beta investment.
+
+**Reconsider when:** Validated product requirements cannot be met sustainably in the current architecture, or an intentional platform migration and licensing strategy is approved.
+
 ## 2026-07-21 — GitHub is the actionable work system
 
 **Decision:** Features, bugs, research, testing, and technical debt are tracked in [GitHub Issues](https://github.com/nicholashorsky/financial-gps/issues) and the [Financial GPS Development project](https://github.com/users/nicholashorsky/projects/1). Markdown files retain product knowledge, current status, roadmap outcomes, and decision history.
