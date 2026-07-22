@@ -606,10 +606,14 @@ def _render_overview_section(conn, user_id: int, summary) -> None:
 
 def _render_import_section(conn, user_id: int, summary) -> object:
     st.subheader("CSV Import")
+    st.warning(
+        "Synthetic sample data only during this early beta. Do not upload a real bank or credit-card export. "
+        "Test data may be reset without notice and has no recovery guarantee."
+    )
     _render_import_history(conn, user_id)
     uploaded_file = st.file_uploader("Upload an RBC CSV export", type=["csv"], key="spending_csv_upload")
     if uploaded_file is None:
-        st.caption("Use the sample CSV for beta testing, then switch to real exports when you trust the flow.")
+        st.caption("Choose one of the fictional persona CSVs in `csv samples/` and use a fresh test account.")
         return summary
 
     file_bytes = uploaded_file.getvalue()

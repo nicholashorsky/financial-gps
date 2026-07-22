@@ -60,6 +60,10 @@ class StreamlitAppSmokeTests(unittest.TestCase):
 
         app = self.click_button(app, "💸  Spending")
         app = self.click_button(app, "Import CSV")
+        self.assertTrue(
+            any("Synthetic sample data only" in message.value for message in app.warning),
+            "The CSV import did not display the synthetic-data restriction.",
+        )
         app.file_uploader[0].upload(
             SAMPLE_CSV_PATH.name,
             SAMPLE_CSV_PATH.read_bytes(),

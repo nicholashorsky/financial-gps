@@ -8,6 +8,10 @@ from auth import create_user
 def render_register() -> None:
     st.subheader("Create your account")
     st.caption("Let's figure out where you're actually headed.")
+    st.warning(
+        "Synthetic sample data only during this early beta. Do not enter or upload real banking, tax, account, "
+        "or other personal financial information. Test data may be reset without notice."
+    )
 
     with st.form("register_form"):
         name = st.text_input("Name (optional)")

@@ -98,7 +98,9 @@ financial_gps/
 
 ## Beta Test With Sample Data
 
-The repo includes a realistic RBC multi-account sample at `csv samples/RBC SAMPLE CSV.csv`.
+The repo includes the original RBC-style sample plus eight fictional personas documented in [`csv samples/README.md`](csv%20samples/README.md). All are synthetic and intended for product validation.
+
+> **Synthetic-data beta:** Do not upload real bank exports or enter real personal financial information. Beta data may be reset without notice and has no recovery guarantee. See the [Beta Data and Storage Policy](docs/BETA_DATA_POLICY.md).
 
 Suggested beta smoke path:
 
@@ -108,7 +110,7 @@ Suggested beta smoke path:
 4. Import transactions
 5. Check Home, Spending, Forecast, Goals, FIRE Profile, FIRE Forecast, and Data Quality
 
-The sample is synthetic test data for product validation. Use it before asking testers to upload personal bank exports.
+Import one persona per fresh test account so histories remain isolated and results are easier to compare.
 
 ## Deploy to Streamlit Community Cloud
 
@@ -119,8 +121,8 @@ The sample is synthetic test data for product validation. Use it before asking t
 
 ## Deployment Notes
 
-- The current app uses SQLite, which is fine for local development and lightweight demos.
-- For shared testing with persistent multi-user data, move storage to a hosted database such as PostgreSQL or Supabase.
+- The current SQLite deployment is approved only for local use, demos, and the invited synthetic-data beta described in the [Beta Data and Storage Policy](docs/BETA_DATA_POLICY.md).
+- Managed PostgreSQL, versioned migrations, verified isolation, and tested backup/restore are required before accepting real financial data.
 - A browser refresh resets Streamlit session state, but database-backed data remains.
 - Set `FINANCIAL_GPS_ENV=production` in the deployment environment.
 - Keep Streamlit's CORS and XSRF protections enabled.
@@ -144,6 +146,7 @@ Project documentation:
 - [Current status](docs/CURRENT_STATUS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Decision log](docs/DECISIONS.md)
+- [Beta data and storage policy](docs/BETA_DATA_POLICY.md)
 - [GitHub Issues](https://github.com/nicholashorsky/financial-gps/issues)
 - [Financial GPS Development project](https://github.com/users/nicholashorsky/projects/1)
 

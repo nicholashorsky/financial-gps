@@ -62,15 +62,15 @@ This log records durable product and technical decisions. Open questions belong 
 
 **Reconsider when:** Only if the application architecture is intentionally replaced.
 
-## 2026-07-21 — SQLite is local/demo storage
+## 2026-07-22 — First external beta is synthetic-only on SQLite
 
-**Decision:** SQLite is acceptable for local development, synthetic testing, and lightweight demonstrations. It is not approved as the long-term store for a shared beta containing real financial data.
+**Decision:** Use one SQLite-backed Streamlit instance for a small, invited, synthetic-data-only external beta. Do not accept real personal financial data. Migrate to managed PostgreSQL before real-data, public, persistent, multi-instance, paid, or recovery-guaranteed testing.
 
-**Reasoning:** Shared financial data requires stronger concurrency, backup, recovery, and operational controls.
+**Reasoning:** SQLite supports disposable product validation but does not provide the concurrency, durable hosted persistence, automated backup, point-in-time recovery, or database-level controls expected for real financial data.
 
-**Tradeoffs:** A managed database migration is required before broader real-data testing.
+**Tradeoffs:** Testers must use fictional personas, data may be reset without recovery, and the beta must remain small and single-instance. PostgreSQL compatibility, migrations, operations, and isolation work are deferred until the real-data gate.
 
-**Reconsider when:** The tester scope and storage requirements in [Issue #3](https://github.com/nicholashorsky/financial-gps/issues/3) are decided.
+**Reconsider when:** Any trigger in the [Beta Data and Storage Policy](BETA_DATA_POLICY.md) is reached.
 
 ## 2026-07-21 — Development login fails closed
 

@@ -1,0 +1,9 @@
+File,Profile,Rows,Account Types,Date Start,Date End,Net CAD,Net USD,Test Focus
+01_steady_professional.csv,Steady professional,179,"Chequing, Savings, Visa",2026-01-01,2026-06-30,20162.41,0.00,"Stable biweekly salary, rent, recurring bills, moderate discretionary spending, and consistent savings."
+02_family_household.csv,Family household,272,"Chequing, Savings, Visa",2026-01-01,2026-06-30,368.71,0.00,"Two-income family with mortgage, childcare, utilities, groceries, fuel, household purchases, and an emergency fund."
+03_freelancer_irregular_income.csv,Freelancer,195,"Chequing, Savings, Visa",2026-01-01,2026-06-30,21414.92,0.00,"Irregular client payments, business expenses, tax-reserve transfers, partial card payments, and a large equipment purchase."
+04_student_budget.csv,Student budget,143,"Chequing, Savings, Visa",2026-01-01,2026-06-30,-104.34,0.00,"Part-time income, student aid, tuition, low-cost living, small savings transfers, and an NSF fee reversal edge case."
+05_fire_focused_high_saver.csv,FIRE-focused high saver,186,"Chequing, Savings, Visa",2026-01-01,2026-06-30,51394.44,0.00,"High-income, low fixed costs, aggressive monthly savings, full card payments, and a bonus contribution."
+06_cashflow_stress.csv,Cash-flow stress,189,"Chequing, Savings, Visa",2026-01-01,2026-06-30,620.76,0.00,"Variable pay, high fixed costs, partial credit-card payments, emergency repair, savings withdrawal, fees, and a tax refund."
+07_travel_mixed_currency.csv,Travel and mixed currency,174,"Chequing, Savings, Visa",2026-01-01,2026-06-30,22564.71,-842.27,"Regular Canadian activity plus travel bookings, USD purchases in the USD$ column, and a foreign-transaction fee."
+08_retiree_sparse_activity.csv,Retiree,125,"Chequing, Savings, Visa",2026-01-01,2026-06-30,15927.42,0.00,"Sparse activity with pension, CPP/OAS income, condo costs, healthcare purchases, and conservative savings."

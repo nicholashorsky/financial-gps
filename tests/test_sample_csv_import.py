@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,9 +14,24 @@ from shared.db import get_connection, init_db
 
 
 SAMPLE_CSV = Path(__file__).resolve().parent.parent / "csv samples" / "RBC SAMPLE CSV.csv"
+SAMPLE_DIRECTORY = SAMPLE_CSV.parent
+DATASET_MANIFEST = SAMPLE_DIRECTORY / "DATASET_MANIFEST.csv"
 
 
 class SampleCSVImportTests(unittest.TestCase):
+    def test_synthetic_persona_datasets_match_manifest_and_parse_cleanly(self) -> None:
+        with DATASET_MANIFEST.open(encoding="utf-8-sig", newline="") as manifest_file:
+            manifest_rows = list(csv.DictReader(manifest_file))
+
+        self.assertEqual(len(manifest_rows), 8)
+        for row in manifest_rows:
+            with self.subTest(dataset=row["File"]):
+                parsed = parse_csv((SAMPLE_DIRECTORY / row["File"]).read_bytes())
+                self.assertEqual(parsed.format_name, "rbc_multi")
+                self.assertEqual(len(parsed.transactions), int(row["Rows"]))
+                self.assertEqual(parsed.skipped_invalid, 0)
+                self.assertEqual(parsed.warnings, [])
+
     def test_rbc_sample_import_exercises_accounts_transfers_and_bridge(self) -> None:
         temp_db = tempfile.NamedTemporaryFile(delete=False)
         temp_db.close()
