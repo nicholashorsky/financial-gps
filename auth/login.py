@@ -38,6 +38,10 @@ def render_login() -> None:
     st.subheader("Welcome back")
     st.caption("Future You is waiting for direction.")
 
+    account_notice = st.session_state.pop("account_notice", None)
+    if account_notice:
+        st.success(account_notice)
+
     if _test_login_enabled():
         with st.container(border=True):
             st.caption("Development shortcut")

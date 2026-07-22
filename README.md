@@ -147,6 +147,8 @@ Project documentation:
 - [Roadmap](docs/ROADMAP.md)
 - [Decision log](docs/DECISIONS.md)
 - [Beta data and storage policy](docs/BETA_DATA_POLICY.md)
+- [Synthetic beta tester guide](docs/BETA_TESTER_GUIDE.md)
+- [Synthetic beta retention runbook](docs/BETA_RETENTION_RUNBOOK.md)
 - [GitHub Issues](https://github.com/nicholashorsky/financial-gps/issues)
 - [Financial GPS Development project](https://github.com/users/nicholashorsky/projects/1)
 

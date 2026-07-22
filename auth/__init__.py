@@ -74,6 +74,18 @@ def update_user_profile(user_id: int, *, name: str | None = None) -> dict | None
         conn.close()
 
 
+def delete_user_account(user_id: int) -> bool:
+    """Delete one user and their cascading account data from the active database."""
+
+    conn = get_connection()
+    try:
+        cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
+
+
 def get_or_create_test_user() -> dict:
     email = "test@financialgps.local"
     password = "test-password-not-for-production"

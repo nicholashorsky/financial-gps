@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from auth import update_user_profile
+from auth import delete_user_account, update_user_profile
 from budget.categorizer import (
     add_user_category,
     add_user_rule,
@@ -21,6 +21,7 @@ from budget.categorizer import (
     update_user_rule,
 )
 from shared.db import get_connection
+from shared.beta_policy import ACCOUNT_DELETION_NOTICE
 from shared.fire_service import get_or_create_fire_profile, save_fire_profile
 
 
@@ -173,5 +174,32 @@ def render() -> None:
                                     st.rerun()
                                 except ValueError as exc:
                                     st.error(str(exc))
+
+        st.divider()
+        st.subheader("Delete beta account")
+        st.warning(ACCOUNT_DELETION_NOTICE)
+        with st.form("delete_beta_account_form"):
+            confirmation = st.text_input(
+                "Type your account email to confirm",
+                placeholder=str(user.get("email", "")),
+            )
+            understood = st.checkbox(
+                "I understand that this permanently deletes my beta account and test data."
+            )
+            delete_submitted = st.form_submit_button(
+                "Permanently delete account",
+                disabled=not understood,
+            )
+            if delete_submitted:
+                expected_email = str(user.get("email", "")).strip().lower()
+                if confirmation.strip().lower() != expected_email:
+                    st.error("Enter your account email exactly to confirm deletion.")
+                elif delete_user_account(user_id):
+                    st.session_state.clear()
+                    st.session_state.account_notice = "Your beta account and test data were deleted."
+                    st.session_state.page = "Login"
+                    st.rerun()
+                else:
+                    st.error("The account could not be deleted. It may already have been removed.")
     finally:
         conn.close()

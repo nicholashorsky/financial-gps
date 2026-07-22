@@ -14,6 +14,7 @@ from budget.categorizer import add_user_rule, get_user_categories, infer_transac
 from budget.csv_parser import parse_csv, preview_csv
 from budget.importer import get_spending_summary, import_csv_transactions, list_import_batches, undo_import_batch
 from budget.narrator import csv_sync_message, spending_message
+from shared.beta_policy import SYNTHETIC_DATA_NOTICE
 from shared.db import get_connection
 from shared.formatting import format_currency as _format_money, format_date, format_month
 from shared.theme import INCOME, SPENDING, style_figure
@@ -606,10 +607,7 @@ def _render_overview_section(conn, user_id: int, summary) -> None:
 
 def _render_import_section(conn, user_id: int, summary) -> object:
     st.subheader("CSV Import")
-    st.warning(
-        "Synthetic sample data only during this early beta. Do not upload a real bank or credit-card export. "
-        "Test data may be reset without notice and has no recovery guarantee."
-    )
+    st.warning(SYNTHETIC_DATA_NOTICE)
     _render_import_history(conn, user_id)
     uploaded_file = st.file_uploader("Upload an RBC CSV export", type=["csv"], key="spending_csv_upload")
     if uploaded_file is None:
