@@ -22,12 +22,13 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Automated Streamlit workflow coverage using a disposable database and the RBC sample CSV.
 * Migration of actionable notes into GitHub Issues and the project board.
 * Approved a synthetic-data-only SQLite boundary for the first external beta and added eight parser-validated fictional datasets.
+* Completed the deployed fresh-account smoke test on Streamlit Community Cloud with the original 118-transaction sample.
 
 ## Current focus
 
 The immediate focus is beta-exit validation:
 
-1. [Complete a deployed fresh-account beta smoke test](https://github.com/nicholashorsky/financial-gps/issues/19).
+1. Review the [deployed beta smoke-test record](DEPLOYMENT_SMOKE_TEST_2026-07-22.md) and close [Issue #19](https://github.com/nicholashorsky/financial-gps/issues/19).
 2. Validate the expanded synthetic persona datasets in isolated tester accounts.
 3. Keep real financial data outside the application until the PostgreSQL readiness work is complete.
 
@@ -38,7 +39,7 @@ The storage-boundary decision in [Issue #3](https://github.com/nicholashorsky/fi
 ## Blockers and undecided questions
 
 * The first external beta is synthetic-only. Managed PostgreSQL is required before accepting real financial data; see the [Beta Data and Storage Policy](BETA_DATA_POLICY.md).
-* A deployed fresh-account test remains required before inviting external testers: [#19](https://github.com/nicholashorsky/financial-gps/issues/19).
+* SQLite passed normal refresh persistence but remains non-durable across restarts and redeployments; the synthetic-only restriction remains in force.
 
 ## Validation baseline
 
