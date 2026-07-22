@@ -9,6 +9,7 @@ from fire_engine.calculators.decumulation import sequence_withdrawals
 from fire_engine.calculators.federal_tax import calculate_federal_tax
 from fire_engine.calculators.gis_estimator import estimate_gis
 from fire_engine.calculators.oas_estimator import estimate_oas_monthly
+from fire_engine.calculators.oas_recovery import calculate_oas_recovery_tax
 from fire_engine.calculators.provincial_tax_on import calculate_ontario_tax
 from fire_engine.calculators.rrif_minimum import (
     RRIF_CONVERSION_AGE,
@@ -38,6 +39,7 @@ class ProjectionYear:
     total_spending: float
     federal_tax: float
     provincial_tax: float
+    oas_recovery_tax: float
     taxable_income: float
     withdrawals: dict[str, float]
     taxable_withdrawals: float
@@ -150,18 +152,26 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
             ).annual_amount
 
         base_taxable_income = employment_income + cpp_received + oas_received
+        # OAS and GIS payments are excluded from income used to estimate GIS.
+        # Taxable RRSP/RRIF withdrawals are added during sequencing.
+        base_gis_income = employment_income + cpp_received
         annual_spending = household.annual_spending * ((1 + household.spending_inflation) ** offset)
         withdrawals: dict[str, float] = {}
+        sequencer_notes: list[str] = []
         if rrif_minimum_withdrawal > 0:
             withdrawals["rrif"] = rrif_minimum_withdrawal
+            sequencer_notes.append(
+                f"Mandatory RRIF minimum withdrawal: ${rrif_minimum_withdrawal:,.2f}."
+            )
         withdrawal_tax_limit_reached = False
 
         for _ in range(MAX_WITHDRAWAL_TAX_ITERATIONS):
             taxable_withdrawals = _taxable_withdrawal_total(withdrawals)
             taxable_income = base_taxable_income + taxable_withdrawals
+            gis_income = base_gis_income + taxable_withdrawals
             gis_received = (
                 estimate_gis(
-                    taxable_income,
+                    gis_income,
                     employment_income,
                     False,
                     resolved_params,
@@ -171,6 +181,11 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
             )
             federal_tax = calculate_federal_tax(taxable_income, resolved_params).federal_tax
             provincial_tax = calculate_ontario_tax(taxable_income, resolved_params).provincial_tax
+            oas_recovery_tax = calculate_oas_recovery_tax(
+                taxable_income,
+                oas_received,
+                resolved_params,
+            )
             total_withdrawals = sum(withdrawals.values())
             net_surplus = (
                 base_taxable_income
@@ -178,14 +193,26 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
                 + total_withdrawals
                 - federal_tax
                 - provincial_tax
+                - oas_recovery_tax
                 - annual_spending
             )
             if net_surplus >= -MONEY_TOLERANCE:
                 break
 
-            decumulation = sequence_withdrawals(abs(net_surplus), accounts)
+            decumulation = sequence_withdrawals(
+                abs(net_surplus),
+                accounts,
+                baseline_taxable_income=taxable_income,
+                baseline_gis_income=gis_income,
+                earned_income=employment_income,
+                is_gis_eligible=gis_received > 0,
+                is_couple=False,
+                oas_received=oas_received,
+                resolved_params=resolved_params,
+            )
             amount_withdrawn = sum(decumulation.withdrawals.values())
             _merge_withdrawals(withdrawals, decumulation.withdrawals)
+            sequencer_notes.extend(decumulation.notes)
             if amount_withdrawn <= MONEY_TOLERANCE:
                 break
         else:
@@ -193,9 +220,10 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
 
         taxable_withdrawals = _taxable_withdrawal_total(withdrawals)
         taxable_income = base_taxable_income + taxable_withdrawals
+        gis_income = base_gis_income + taxable_withdrawals
         gis_received = (
             estimate_gis(
-                taxable_income,
+                gis_income,
                 employment_income,
                 False,
                 resolved_params,
@@ -205,19 +233,26 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
         )
         federal_tax = calculate_federal_tax(taxable_income, resolved_params).federal_tax
         provincial_tax = calculate_ontario_tax(taxable_income, resolved_params).provincial_tax
+        oas_recovery_tax = calculate_oas_recovery_tax(
+            taxable_income,
+            oas_received,
+            resolved_params,
+        )
         net_surplus = (
             base_taxable_income
             + gis_received
             + sum(withdrawals.values())
             - federal_tax
             - provincial_tax
+            - oas_recovery_tax
             - annual_spending
         )
 
-        sequencer_notes = [
-            f"Withdrew {amount:.2f} from {account_type}."
-            for account_type, amount in withdrawals.items()
-        ]
+        if withdrawals and not sequencer_notes:
+            sequencer_notes = [
+                f"Withdrew {amount:.2f} from {account_type}."
+                for account_type, amount in withdrawals.items()
+            ]
         if net_surplus < -MONEY_TOLERANCE:
             sequencer_notes.append("Available accounts could not fully cover spending need.")
         if withdrawal_tax_limit_reached:
@@ -244,6 +279,7 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
                 total_spending=round(annual_spending, 2),
                 federal_tax=round(federal_tax, 2),
                 provincial_tax=round(provincial_tax, 2),
+                oas_recovery_tax=round(oas_recovery_tax, 2),
                 taxable_income=round(taxable_income, 2),
                 withdrawals={account_type: round(amount, 2) for account_type, amount in withdrawals.items()},
                 taxable_withdrawals=round(taxable_withdrawals, 2),

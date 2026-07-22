@@ -46,6 +46,7 @@ def render() -> None:
                     "GIS": year.gis_received,
                     "Federal tax": year.federal_tax,
                     "Ontario tax": year.provincial_tax,
+                    "OAS recovery": year.oas_recovery_tax,
                     "Taxable income": year.taxable_income,
                     "Withdrawals": sum(year.withdrawals.values()),
                     "Taxable withdrawals": year.taxable_withdrawals,

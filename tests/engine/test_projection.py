@@ -187,6 +187,59 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(years[0].rrif_minimum_withdrawal, 0.0)
         self.assertEqual(years[1].rrif_minimum_withdrawal, 5280.0)
 
+    def test_gis_sensitive_projection_prefers_tfsa_and_explains_loss(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1959, 1, 1), province="ON"),
+            annual_spending=35000,
+            spending_inflation=0.0,
+            start_year=2026,
+            accounts=[
+                InvestmentAccount(account_type="rrsp", current_balance=20000, annual_return=0.0),
+                InvestmentAccount(account_type="tfsa", current_balance=20000, annual_return=0.0),
+            ],
+            benefits=[
+                BenefitEnrollment(
+                    benefit_type="OAS",
+                    elected_start_age=65,
+                    estimated_monthly_amount=750,
+                )
+            ],
+        )
+
+        result = project_household(household, years=1)[0]
+
+        self.assertEqual(result.gis_received, 22008.0)
+        self.assertGreater(result.withdrawals.get("tfsa", 0.0), 0.0)
+        self.assertEqual(result.withdrawals.get("rrsp", 0.0), 0.0)
+        self.assertTrue(any("GIS loss" in note for note in result.sequencer_notes))
+
+    def test_oas_recovery_is_applied_and_capped_in_projection(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1959, 1, 1), province="ON"),
+            annual_spending=0.0,
+            spending_inflation=0.0,
+            start_year=2026,
+            income_sources=[
+                IncomeSource(
+                    source_type="employment",
+                    annual_amount=500000,
+                    start_year=2026,
+                    inflation_rate=0.0,
+                )
+            ],
+            benefits=[
+                BenefitEnrollment(
+                    benefit_type="OAS",
+                    elected_start_age=65,
+                    estimated_monthly_amount=750,
+                )
+            ],
+        )
+
+        result = project_household(household, years=1)[0]
+
+        self.assertEqual(result.oas_recovery_tax, result.oas_received)
+
 
 if __name__ == "__main__":
     unittest.main()

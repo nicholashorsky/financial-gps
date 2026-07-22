@@ -79,6 +79,7 @@ class CRA2026Params:
     oas_max_monthly_65_74: float = 751.97
     oas_max_monthly_75_plus: float = 827.17
     oas_recovery_threshold: float = 95323
+    oas_recovery_rate: float = 0.15
     oas_deferral_increase_per_month: float = 0.006  # 0.6% per month deferred
 
     # GIS
