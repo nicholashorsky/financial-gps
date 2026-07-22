@@ -156,6 +156,20 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                     self.assertEqual(saved_cpp["cpp_estimate_at_65"], 1000.0)
                     self.assertEqual(saved_cpp["estimated_monthly_amount"], 1000.0)
                     self.assertEqual(saved_cpp["source"], "manual")
+                elif expected_page == "FIRE Goal Setup":
+                    variant = next(
+                        field for field in app.selectbox if field.label == "FIRE variant"
+                    )
+                    variant.select("fat")
+                    app = self.click_button(app, "Save FIRE goal")
+                    self.assert_no_streamlit_exception(app)
+
+                    with db_module.get_connection() as connection:
+                        saved_goal = connection.execute(
+                            "SELECT fire_variant FROM fire_profiles WHERE user_id = ?",
+                            (int(app.session_state["user"]["id"]),),
+                        ).fetchone()
+                    self.assertEqual(saved_goal["fire_variant"], "fat")
                 elif expected_page == "Settings":
                     self.assertTrue(
                         any(button.label == "Permanently delete account" for button in app.button)
