@@ -26,19 +26,19 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Added tester-facing synthetic-data notices, documented retention operations, and implemented self-service beta account deletion.
 * Hardened FIRE projections with explicit parameter-year handling, RRIF minimum withdrawals, a validated annual cash-flow contract, and incremental tax-aware decumulation.
 * Added a user-scoped Service Canada CPP estimate override with separate start-age modeling and visible source guidance.
+* Added neutral Lean, Coast, Barista, and Fat FIRE guidance while preserving existing saved selections.
 
 ## Current focus
 
 The immediate focus is completing the remaining beta usability work:
 
-1. Explain FIRE variants in Goal Setup ([Issue #10](https://github.com/nicholashorsky/financial-gps/issues/10)).
-2. Reorganize Settings into clear sections ([Issue #1](https://github.com/nicholashorsky/financial-gps/issues/1)).
-3. Complete the final narrow-viewport audit after the interface changes ([Issue #14](https://github.com/nicholashorsky/financial-gps/issues/14)).
-4. Keep real financial data outside the application until the PostgreSQL readiness work is complete.
+1. Reorganize Settings into clear sections ([Issue #1](https://github.com/nicholashorsky/financial-gps/issues/1)).
+2. Complete the final narrow-viewport audit after the interface changes ([Issue #14](https://github.com/nicholashorsky/financial-gps/issues/14)).
+3. Keep real financial data outside the application until the PostgreSQL readiness work is complete.
 
 ## Release readiness
 
-The deployed fresh-account path and synthetic-data storage boundary are approved. Once Issues #10, #1, and #14 are resolved and the regression suite remains green, the invited synthetic-data beta can be treated as feature-complete. Ready work is visible in the [project board](https://github.com/users/nicholashorsky/projects/1).
+The deployed fresh-account path and synthetic-data storage boundary are approved. Once Issues #1 and #14 are resolved and the regression suite remains green, the invited synthetic-data beta can be treated as feature-complete. Ready work is visible in the [project board](https://github.com/users/nicholashorsky/projects/1).
 
 ## Blockers and undecided questions
 
@@ -49,7 +49,7 @@ The deployed fresh-account path and synthetic-data storage boundary are approved
 
 Current automated and deployment validation:
 
-* 90 automated tests pass.
+* 91 automated tests pass.
 * 21 Streamlit navigation subtests pass.
 * Ruff reports no issues.
 * The original sample import creates 118 transactions across four accounts in an isolated smoke test.
