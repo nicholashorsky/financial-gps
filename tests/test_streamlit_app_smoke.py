@@ -134,6 +134,28 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                         ).fetchone()
                     self.assertEqual(saved_profile["province"], "ON")
                     self.assertEqual(saved_profile["date_of_birth"], "1988-06-15")
+                elif expected_page == "Benefits Workspace":
+                    cpp_estimate = next(
+                        field
+                        for field in app.number_input
+                        if field.label == "Service Canada monthly CPP estimate at age 65"
+                    )
+                    cpp_estimate.set_value(1000.0)
+                    app = self.click_button(app, "Save benefit elections")
+                    self.assert_no_streamlit_exception(app)
+
+                    with db_module.get_connection() as connection:
+                        saved_cpp = connection.execute(
+                            """
+                            SELECT cpp_estimate_at_65, estimated_monthly_amount, source
+                            FROM fire_benefit_enrollments
+                            WHERE user_id = ? AND benefit_type = 'CPP'
+                            """,
+                            (int(app.session_state["user"]["id"]),),
+                        ).fetchone()
+                    self.assertEqual(saved_cpp["cpp_estimate_at_65"], 1000.0)
+                    self.assertEqual(saved_cpp["estimated_monthly_amount"], 1000.0)
+                    self.assertEqual(saved_cpp["source"], "manual")
                 elif expected_page == "Settings":
                     self.assertTrue(
                         any(button.label == "Permanently delete account" for button in app.button)

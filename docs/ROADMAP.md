@@ -4,6 +4,8 @@ The roadmap describes release-level outcomes. Detailed requirements and active w
 
 ## Phase 1 — Beta exit
 
+**Status:** Final usability issues and narrow-viewport audit remain.
+
 ### Goal
 
 Deliver a stable, understandable Streamlit application suitable for controlled validation with synthetic data.
@@ -17,7 +19,11 @@ Deliver a stable, understandable Streamlit application suitable for controlled v
 * Preserve automated financial, import, isolation, and workflow coverage.
 * Correct high-impact FIRE cash-flow and tax assumptions.
 
+The deployment smoke test, storage-boundary decision, FIRE correctness work, and CPP estimate override are complete. Remaining tracked work is limited to Issues #10, #1, and #14.
+
 ## Phase 2 — Early tester release
+
+**Status:** Synthetic-data-only invited testing is approved; broader or real-data testing is gated on Phase 4 persistence work.
 
 ### Goal
 

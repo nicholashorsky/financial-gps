@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from budget.narrator import cpp_delay_message, gis_message
-from fire_engine.calculators import estimate_gis
+from fire_engine.calculators import adjust_cpp_for_start_age, estimate_gis
 from shared.db import get_connection
 from shared.fire_service import benefit_previews, get_or_create_fire_profile, list_benefit_enrollments, upsert_benefit_enrollment
 
@@ -25,14 +25,38 @@ def render() -> None:
         profile = get_or_create_fire_profile(conn, user_id)
         previews = benefit_previews(conn, user_id)
         benefits = {row["benefit_type"]: row for row in list_benefit_enrollments(conn, user_id)}
+        saved_cpp = benefits.get("CPP", {})
 
         with st.form("fire_benefits_form"):
             left, right = st.columns(2)
             with left:
-                cpp_age = st.slider("CPP start age", min_value=60, max_value=70, value=int(benefits.get("CPP", {}).get("elected_start_age") or 65))
-                cpp_preview = previews["cpp_60"] if cpp_age == 60 else previews["cpp_65"] if cpp_age == 65 else previews["cpp_70"]
-                st.metric("CPP monthly preview", f"${cpp_preview.monthly_amount:,.2f}")
-                st.caption("Delaying CPP changes the lifetime income profile immediately in the engine.")
+                saved_cpp_at_65 = saved_cpp.get("cpp_estimate_at_65")
+                cpp_estimate_at_65 = st.number_input(
+                    "Service Canada monthly CPP estimate at age 65",
+                    min_value=0.0,
+                    value=float(saved_cpp_at_65 or 0),
+                    step=25.0,
+                    help=(
+                        "Use the monthly age-65 estimate from your My Service Canada Account. "
+                        "Leave this at $0 to use Financial GPS's planning estimate."
+                    ),
+                )
+                cpp_age = st.slider(
+                    "CPP start age",
+                    min_value=60,
+                    max_value=70,
+                    value=int(saved_cpp.get("elected_start_age") or 65),
+                )
+                if cpp_estimate_at_65 > 0:
+                    cpp_preview = adjust_cpp_for_start_age(cpp_estimate_at_65, cpp_age)
+                    cpp_source = "manual"
+                    st.caption("Source: your Service Canada age-65 estimate")
+                else:
+                    cpp_preview = adjust_cpp_for_start_age(previews["cpp_65"].monthly_amount, cpp_age)
+                    cpp_source = "calculated"
+                    st.caption("Source: Financial GPS planning estimate based on 70% of maximum CPP")
+                st.metric(f"Estimated CPP at age {cpp_age}", f"${cpp_preview.monthly_amount:,.2f}/month")
+                st.caption("Your start age is modeled separately from the age-65 amount you enter.")
             with right:
                 oas_age = st.slider("OAS start age", min_value=65, max_value=70, value=int(benefits.get("OAS", {}).get("elected_start_age") or 65))
                 oas_preview = previews["oas_65"] if oas_age == 65 else previews["oas_70"]
@@ -51,8 +75,8 @@ def render() -> None:
                     "CPP",
                     cpp_age,
                     estimated_monthly_amount=cpp_preview.monthly_amount,
-                    source="calculated",
-                    cpp_estimate_at_65=previews["cpp_65"].monthly_amount,
+                    source=cpp_source,
+                    cpp_estimate_at_65=cpp_estimate_at_65 or previews["cpp_65"].monthly_amount,
                 )
                 upsert_benefit_enrollment(
                     conn,

@@ -37,6 +37,27 @@ def _load_household_fixture(name: str) -> Household:
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_projection_uses_manual_cpp_amount_at_elected_start_age(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1956, 1, 1), province="ON"),
+            annual_spending=0,
+            spending_inflation=0.0,
+            start_year=2026,
+            benefits=[
+                BenefitEnrollment(
+                    benefit_type="CPP",
+                    elected_start_age=70,
+                    estimated_monthly_amount=1420,
+                    source="manual",
+                    cpp_estimate_at_65=1000,
+                )
+            ],
+        )
+
+        result = project_household(household, years=1)[0]
+
+        self.assertEqual(result.cpp_received, 17040)
+
     def test_projection_runs_40_years(self) -> None:
         household = _load_household_fixture("household_single_ontario.json")
         years = project_household(household, years=40)

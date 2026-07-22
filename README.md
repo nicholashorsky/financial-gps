@@ -138,7 +138,9 @@ Import one persona per fresh test account so histories remain isolated and resul
 - Sidebar navigation skeleton
 - CRA 2026 parameters + loader
 
-**Current:** Phase 8 — Beta hardening, sample-data smoke tests, and deployment validation
+**Current:** Phase 8 — Final beta usability work and invited synthetic-data testing
+
+The deployed fresh-account smoke path has passed. Three beta-targeted usability issues remain before the invited synthetic-data beta is considered feature-complete; current details are maintained in [Current status](docs/CURRENT_STATUS.md).
 
 Project documentation:
 

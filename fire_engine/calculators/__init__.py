@@ -1,6 +1,10 @@
 """Calculator exports."""
 
-from fire_engine.calculators.cpp_estimator import CPPEstimate, estimate_cpp_monthly
+from fire_engine.calculators.cpp_estimator import (
+    CPPEstimate,
+    adjust_cpp_for_start_age,
+    estimate_cpp_monthly,
+)
 from fire_engine.calculators.decumulation import DecumulationResult, sequence_withdrawals
 from fire_engine.calculators.federal_tax import calculate_federal_tax
 from fire_engine.calculators.fhsa_state import FHSAStateResult, calculate_fhsa_state
@@ -38,6 +42,7 @@ __all__ = [
     "calculate_rrsp_room",
     "calculate_rrif_minimum",
     "calculate_tfsa_room",
+    "adjust_cpp_for_start_age",
     "estimate_cpp_monthly",
     "estimate_gis",
     "estimate_oas_monthly",
