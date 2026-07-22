@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from fire_engine.parameters.cra_2026 import CRA2026Params, CRA_2026
+from fire_engine.parameters.errors import UnsupportedTaxYearError
+
+
+DEFAULT_PARAMETER_YEAR = 2026
+YEAR_PARAMS_REGISTRY: dict[int, CRA2026Params] = {
+    DEFAULT_PARAMETER_YEAR: CRA_2026,
+}
 
 
 @dataclass
@@ -17,6 +25,11 @@ class ResolvedParams:
     province: str
     effective_date: date
     params: CRA2026Params
+    parameter_year: int = DEFAULT_PARAMETER_YEAR
+
+    @property
+    def uses_fallback(self) -> bool:
+        return self.year != self.parameter_year
 
     @property
     def tfsa_annual_limit(self) -> float:
@@ -51,7 +64,7 @@ def _quarter_from_date(effective_date: date) -> int:
 
 
 def get_params(
-    year: int = 2026,
+    year: int = DEFAULT_PARAMETER_YEAR,
     province: str = "ON",
     effective_date: date | None = None,
 ) -> ResolvedParams:
@@ -66,11 +79,10 @@ def get_params(
     if province == "QC":
         raise ValueError("Quebec support coming soon.")
 
-    if year != 2026:
-        # Future: load cra_2024.py, cra_2025.py as needed
-        pass
+    if year not in YEAR_PARAMS_REGISTRY:
+        raise UnsupportedTaxYearError(year, list(YEAR_PARAMS_REGISTRY))
 
-    base = CRA_2026
+    base = YEAR_PARAMS_REGISTRY[year]
 
     # Apply quarterly OAS indexation if applicable
     quarter = _quarter_from_date(eff)
@@ -81,9 +93,50 @@ def get_params(
             oas_max_monthly_65_74=base.oas_max_monthly_65_74 * index_factor,
             oas_max_monthly_75_plus=base.oas_max_monthly_75_plus * index_factor,
         )
-        return ResolvedParams(year=year, province=province, effective_date=eff, params=adjusted)
+        return ResolvedParams(
+            year=year,
+            province=province,
+            effective_date=eff,
+            params=adjusted,
+            parameter_year=year,
+        )
 
-    return ResolvedParams(year=year, province=province, effective_date=eff, params=base)
+    return ResolvedParams(
+        year=year,
+        province=province,
+        effective_date=eff,
+        params=base,
+        parameter_year=year,
+    )
+
+
+def get_params_or_2026_fallback(
+    year: int,
+    province: str = "ON",
+    effective_date: date | None = None,
+) -> ResolvedParams:
+    """Resolve a projection year, explicitly falling back to flat 2026 values."""
+    try:
+        return get_params(year, province, effective_date)
+    except UnsupportedTaxYearError:
+        requested_effective_date = effective_date or date(year, 7, 1)
+        fallback_day = min(
+            requested_effective_date.day,
+            monthrange(DEFAULT_PARAMETER_YEAR, requested_effective_date.month)[1],
+        )
+        base_effective_date = date(
+            DEFAULT_PARAMETER_YEAR,
+            requested_effective_date.month,
+            fallback_day,
+        )
+        resolved = get_params(DEFAULT_PARAMETER_YEAR, province, base_effective_date)
+        return ResolvedParams(
+            year=year,
+            province=province,
+            effective_date=requested_effective_date,
+            params=resolved.params,
+            parameter_year=DEFAULT_PARAMETER_YEAR,
+        )
 
 
 def is_province_supported(province: str) -> bool:
@@ -94,6 +147,8 @@ def params_to_dict(resolved: ResolvedParams) -> dict[str, Any]:
     p = resolved.params
     return {
         "year": resolved.year,
+        "parameter_year": resolved.parameter_year,
+        "uses_fallback": resolved.uses_fallback,
         "province": resolved.province,
         "effective_date": resolved.effective_date.isoformat(),
         "tfsa_annual_limit": resolved.tfsa_annual_limit,

@@ -557,6 +557,14 @@ def get_data_quality_warnings(conn: sqlite3.Connection, user_id: int) -> list[Da
     benefits = {row["benefit_type"]: row for row in list_benefit_enrollments(conn, user_id)}
     accounts = list_investment_accounts(conn, user_id)
 
+    warnings.append(
+        DataQualityWarning(
+            "tax_parameter_fallback",
+            "Forecast years without verified CRA parameters use flat 2026 tax and benefit values.",
+            "info",
+        )
+    )
+
     txn_count = conn.execute("SELECT COUNT(*) FROM transactions WHERE user_id = ?", (user_id,)).fetchone()[0]
     if txn_count == 0:
         warnings.append(DataQualityWarning("no_csv", "No CSV imported - FIRE defaults are not transaction-backed.", "warning"))

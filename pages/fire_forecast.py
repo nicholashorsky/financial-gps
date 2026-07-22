@@ -48,6 +48,7 @@ def render() -> None:
                     "Taxable income": year.taxable_income,
                     "Withdrawals": sum(year.withdrawals.values()),
                     "Taxable withdrawals": year.taxable_withdrawals,
+                    "Tax parameters": year.parameter_year,
                     "Spending": year.total_spending,
                     "Net surplus": year.net_surplus,
                     "Net worth": year.net_worth,
@@ -64,7 +65,17 @@ def render() -> None:
         st.plotly_chart(chart, use_container_width=True)
         st.info(fire_date_message(estimate_fire_date(conn, user_id)))
 
-        warnings = get_data_quality_warnings(conn, user_id)
+        if any(year.uses_parameter_fallback for year in projection):
+            st.info(
+                "Forecast years without verified CRA parameters use flat 2026 "
+                "tax and benefit values. This assumption is shown in the year-by-year table."
+            )
+
+        warnings = [
+            warning
+            for warning in get_data_quality_warnings(conn, user_id)
+            if warning.code != "tax_parameter_fallback"
+        ]
         if warnings:
             for warning in warnings[:4]:
                 st.warning(warning.message)

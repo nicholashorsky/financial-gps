@@ -6,6 +6,8 @@ from datetime import date
 
 import streamlit as st
 
+from fire_engine.parameters.errors import UnsupportedTaxYearError
+from fire_engine.parameters.loader import get_params
 from shared.db import get_connection
 from shared.fire_service import (
     calculate_room_snapshots,
@@ -33,7 +35,12 @@ def render() -> None:
         tfsa = get_or_create_tfsa_state(conn, user_id)
         rrsp = get_or_create_rrsp_state(conn, user_id)
         fhsa = get_or_create_fhsa_state(conn, user_id)
-        snapshots = calculate_room_snapshots(conn, user_id)
+        try:
+            snapshots = calculate_room_snapshots(conn, user_id)
+        except UnsupportedTaxYearError as exc:
+            st.error(str(exc))
+            st.info("Update the saved snapshot year to a year with verified CRA parameters.")
+            return
 
         cols = st.columns(3)
         cols[0].metric("TFSA room", f"${snapshots['tfsa'].available_room:,.2f}")
@@ -64,36 +71,42 @@ def render() -> None:
                 fhsa_status = st.selectbox("Closure status", ["open", "closed_withdrawal", "closed_transfer", "expired"], index=["open", "closed_withdrawal", "closed_transfer", "expired"].index(fhsa.get("closure_status") or "open"))
 
             if st.form_submit_button("Save room snapshots", type="primary"):
-                save_tfsa_state(
-                    conn,
-                    user_id,
-                    snapshot_year=tfsa_year,
-                    prior_unused_room=tfsa_unused,
-                    prior_year_withdrawals=tfsa_withdrawals,
-                    ytd_contributions=tfsa_ytd,
-                    was_non_resident=tfsa_non_resident,
-                    available_room=snapshots["tfsa"].available_room,
-                )
-                save_rrsp_state(
-                    conn,
-                    user_id,
-                    snapshot_year=rrsp_year,
-                    prior_unused_room=rrsp_unused,
-                    prior_year_earned_income=rrsp_income,
-                    pension_adjustment=rrsp_pa,
-                    ytd_contributions=rrsp_ytd,
-                    deduction_limit=snapshots["rrsp"].deduction_limit,
-                )
-                save_fhsa_state(
-                    conn,
-                    user_id,
-                    open_date=fhsa_open,
-                    carryforward_room=fhsa_carry,
-                    is_first_time_buyer=fhsa_first_time,
-                    closure_status=fhsa_status,
-                )
-                st.success("Room tracker updated.")
-                st.rerun()
+                try:
+                    get_params(int(tfsa_year), "ON")
+                    get_params(int(rrsp_year), "ON")
+                except UnsupportedTaxYearError as exc:
+                    st.error(str(exc))
+                else:
+                    save_tfsa_state(
+                        conn,
+                        user_id,
+                        snapshot_year=tfsa_year,
+                        prior_unused_room=tfsa_unused,
+                        prior_year_withdrawals=tfsa_withdrawals,
+                        ytd_contributions=tfsa_ytd,
+                        was_non_resident=tfsa_non_resident,
+                        available_room=snapshots["tfsa"].available_room,
+                    )
+                    save_rrsp_state(
+                        conn,
+                        user_id,
+                        snapshot_year=rrsp_year,
+                        prior_unused_room=rrsp_unused,
+                        prior_year_earned_income=rrsp_income,
+                        pension_adjustment=rrsp_pa,
+                        ytd_contributions=rrsp_ytd,
+                        deduction_limit=snapshots["rrsp"].deduction_limit,
+                    )
+                    save_fhsa_state(
+                        conn,
+                        user_id,
+                        open_date=fhsa_open,
+                        carryforward_room=fhsa_carry,
+                        is_first_time_buyer=fhsa_first_time,
+                        closure_status=fhsa_status,
+                    )
+                    st.success("Room tracker updated.")
+                    st.rerun()
 
         st.divider()
         warnings = snapshots["tfsa"].warnings + snapshots["fhsa"].warnings

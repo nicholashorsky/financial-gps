@@ -42,6 +42,10 @@ class ProjectionTests(unittest.TestCase):
         years = project_household(household, years=40)
         self.assertEqual(len(years), 40)
         self.assertGreater(years[-1].net_worth, 0)
+        self.assertEqual(years[0].parameter_year, 2026)
+        self.assertFalse(years[0].uses_parameter_fallback)
+        self.assertEqual(years[1].parameter_year, 2026)
+        self.assertTrue(years[1].uses_parameter_fallback)
 
     def test_projection_can_trigger_gis(self) -> None:
         household = _load_household_fixture("household_couple_gis_eligible.json")

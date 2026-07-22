@@ -14,6 +14,7 @@ from fire_engine.engine.rules import evaluate_rules
 from fire_engine.models.benefit_enrollment import BenefitEnrollment
 from fire_engine.models.household import Household
 from fire_engine.models.investment_account import InvestmentAccount
+from fire_engine.parameters.loader import get_params_or_2026_fallback
 
 
 TAXABLE_WITHDRAWAL_ACCOUNT_TYPES = {"rrsp", "rrif"}
@@ -34,6 +35,8 @@ class ProjectionYear:
     taxable_income: float
     withdrawals: dict[str, float]
     taxable_withdrawals: float
+    parameter_year: int
+    uses_parameter_fallback: bool
     net_surplus: float
     net_worth: float
     triggered_rules: list[str]
@@ -75,6 +78,7 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
     for offset in range(years):
         year = household.start_year + offset
         age = household.primary.age_in_year(year)
+        resolved_params = get_params_or_2026_fallback(year, household.primary.province)
         employment_income = round(sum(source.amount_for_year(year) for source in household.income_sources), 2)
 
         cpp_enrollment = benefits.get("CPP")
@@ -83,12 +87,21 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
             if cpp_enrollment.estimated_monthly_amount is not None:
                 cpp_received = cpp_enrollment.estimated_monthly_amount * 12
             else:
-                cpp_received = estimate_cpp_monthly(0.7, cpp_enrollment.elected_start_age).annual_amount
+                cpp_received = estimate_cpp_monthly(
+                    0.7,
+                    cpp_enrollment.elected_start_age,
+                    resolved_params,
+                ).annual_amount
 
         oas_enrollment = benefits.get("OAS")
         oas_received = 0.0
         if oas_enrollment and age >= oas_enrollment.elected_start_age:
-            oas_received = estimate_oas_monthly(age, oas_enrollment.elected_start_age, household.primary.years_in_canada_post_18).annual_amount
+            oas_received = estimate_oas_monthly(
+                age,
+                oas_enrollment.elected_start_age,
+                household.primary.years_in_canada_post_18,
+                resolved_params,
+            ).annual_amount
 
         base_taxable_income = employment_income + cpp_received + oas_received
         annual_spending = household.annual_spending * ((1 + household.spending_inflation) ** offset)
@@ -99,12 +112,17 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
             taxable_withdrawals = _taxable_withdrawal_total(withdrawals)
             taxable_income = base_taxable_income + taxable_withdrawals
             gis_received = (
-                estimate_gis(taxable_income, employment_income, False).annual_amount
+                estimate_gis(
+                    taxable_income,
+                    employment_income,
+                    False,
+                    resolved_params,
+                ).annual_amount
                 if age >= 65
                 else 0.0
             )
-            federal_tax = calculate_federal_tax(taxable_income).federal_tax
-            provincial_tax = calculate_ontario_tax(taxable_income).provincial_tax
+            federal_tax = calculate_federal_tax(taxable_income, resolved_params).federal_tax
+            provincial_tax = calculate_ontario_tax(taxable_income, resolved_params).provincial_tax
             total_withdrawals = sum(withdrawals.values())
             net_surplus = (
                 base_taxable_income
@@ -128,12 +146,17 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
         taxable_withdrawals = _taxable_withdrawal_total(withdrawals)
         taxable_income = base_taxable_income + taxable_withdrawals
         gis_received = (
-            estimate_gis(taxable_income, employment_income, False).annual_amount
+            estimate_gis(
+                taxable_income,
+                employment_income,
+                False,
+                resolved_params,
+            ).annual_amount
             if age >= 65
             else 0.0
         )
-        federal_tax = calculate_federal_tax(taxable_income).federal_tax
-        provincial_tax = calculate_ontario_tax(taxable_income).provincial_tax
+        federal_tax = calculate_federal_tax(taxable_income, resolved_params).federal_tax
+        provincial_tax = calculate_ontario_tax(taxable_income, resolved_params).provincial_tax
         net_surplus = (
             base_taxable_income
             + gis_received
@@ -174,6 +197,8 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
                 taxable_income=round(taxable_income, 2),
                 withdrawals={account_type: round(amount, 2) for account_type, amount in withdrawals.items()},
                 taxable_withdrawals=round(taxable_withdrawals, 2),
+                parameter_year=resolved_params.parameter_year,
+                uses_parameter_fallback=resolved_params.uses_fallback,
                 net_surplus=round(net_surplus, 2),
                 net_worth=net_worth,
                 triggered_rules=evaluate_rules(year, household, taxable_income),
