@@ -27,18 +27,18 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Hardened FIRE projections with explicit parameter-year handling, RRIF minimum withdrawals, a validated annual cash-flow contract, and incremental tax-aware decumulation.
 * Added a user-scoped Service Canada CPP estimate override with separate start-age modeling and visible source guidance.
 * Added neutral Lean, Coast, Barista, and Fat FIRE guidance while preserving existing saved selections.
+* Reorganized Settings into horizontal Profile, Assumptions, Rules, Categories, and Account & data tabs with persistent confirmations.
 
 ## Current focus
 
 The immediate focus is completing the remaining beta usability work:
 
-1. Reorganize Settings into clear sections ([Issue #1](https://github.com/nicholashorsky/financial-gps/issues/1)).
-2. Complete the final narrow-viewport audit after the interface changes ([Issue #14](https://github.com/nicholashorsky/financial-gps/issues/14)).
-3. Keep real financial data outside the application until the PostgreSQL readiness work is complete.
+1. Complete the final narrow-viewport audit after the interface changes ([Issue #14](https://github.com/nicholashorsky/financial-gps/issues/14)).
+2. Keep real financial data outside the application until the PostgreSQL readiness work is complete.
 
 ## Release readiness
 
-The deployed fresh-account path and synthetic-data storage boundary are approved. Once Issues #1 and #14 are resolved and the regression suite remains green, the invited synthetic-data beta can be treated as feature-complete. Ready work is visible in the [project board](https://github.com/users/nicholashorsky/projects/1).
+The deployed fresh-account path and synthetic-data storage boundary are approved. Once Issue #14 is resolved and the regression suite remains green, the invited synthetic-data beta can be treated as feature-complete. Ready work is visible in the [project board](https://github.com/users/nicholashorsky/projects/1).
 
 ## Blockers and undecided questions
 

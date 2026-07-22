@@ -171,9 +171,52 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                         ).fetchone()
                     self.assertEqual(saved_goal["fire_variant"], "fat")
                 elif expected_page == "Settings":
+                    self.assertEqual(
+                        [tab.label for tab in app.tabs],
+                        [
+                            "Profile",
+                            "Assumptions",
+                            "Rules",
+                            "Categories",
+                            "Account & data",
+                        ],
+                    )
                     self.assertTrue(
                         any(button.label == "Permanently delete account" for button in app.button)
                     )
+                    name = next(field for field in app.text_input if field.label == "Name")
+                    name.set_value("Settings Tester")
+                    app = self.click_button(app, "Save profile")
+                    self.assert_no_streamlit_exception(app)
+                    self.assertTrue(any(message.value == "Profile saved." for message in app.success))
+
+                    variant = next(
+                        field
+                        for field in app.selectbox
+                        if field.label == "Default FIRE variant"
+                    )
+                    variant.select("coast")
+                    app = self.click_button(app, "Save financial assumptions")
+                    self.assert_no_streamlit_exception(app)
+                    self.assertTrue(
+                        any(
+                            message.value == "Financial assumptions saved."
+                            for message in app.success
+                        )
+                    )
+
+                    with db_module.get_connection() as connection:
+                        saved_settings = connection.execute(
+                            """
+                            SELECT users.name, fire_profiles.fire_variant
+                            FROM users
+                            JOIN fire_profiles ON fire_profiles.user_id = users.id
+                            WHERE users.id = ?
+                            """,
+                            (int(app.session_state["user"]["id"]),),
+                        ).fetchone()
+                    self.assertEqual(saved_settings["name"], "Settings Tester")
+                    self.assertEqual(saved_settings["fire_variant"], "coast")
 
     def test_registration_displays_synthetic_data_notice(self):
         app = AppTest.from_file(str(APP_PATH)).run(timeout=30)

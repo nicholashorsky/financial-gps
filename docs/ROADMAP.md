@@ -19,7 +19,7 @@ Deliver a stable, understandable Streamlit application suitable for controlled v
 * Preserve automated financial, import, isolation, and workflow coverage.
 * Correct high-impact FIRE cash-flow and tax assumptions.
 
-The deployment smoke test, storage-boundary decision, FIRE correctness work, CPP estimate override, and FIRE variant guidance are complete. Remaining tracked work is limited to Issues #1 and #14.
+The deployment smoke test, storage-boundary decision, FIRE correctness work, CPP estimate override, FIRE variant guidance, and Settings reorganization are complete. Remaining tracked beta-exit work is limited to Issue #14.
 
 ## Phase 2 — Early tester release
 

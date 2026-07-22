@@ -23,160 +23,178 @@ from budget.categorizer import (
 from shared.db import get_connection
 from shared.beta_policy import ACCOUNT_DELETION_NOTICE
 from shared.fire_service import get_or_create_fire_profile, save_fire_profile
+from shared.fire_variants import FIRE_VARIANTS, fire_variant_label
 
 
-def render() -> None:
-    st.title("Settings")
-    st.caption("Profile details, category rules, and the small places where defaults can go wrong.")
+def _render_profile_settings(user: dict, user_id: int) -> None:
+    st.subheader("Profile")
+    st.caption("Your account identity and display name.")
+    with st.form("profile_settings_form"):
+        st.text(f"Email: {user.get('email', '')}")
+        display_name = st.text_input("Name", value=user.get("name") or "")
+        if st.form_submit_button("Save profile", type="primary"):
+            updated_user = update_user_profile(
+                user_id,
+                name=display_name.strip() or None,
+            )
+            if updated_user:
+                st.session_state.user = updated_user
+            st.session_state.settings_notice = "Profile saved."
+            st.rerun()
 
-    user = st.session_state.get("user", {})
-    if not user:
-        st.info("Log in to edit settings.")
-        return
 
-    user_id = int(user["id"])
-    conn = get_connection()
-    try:
-        seed_system_rules(conn, user_id)
-        seed_user_categories(conn, user_id)
-        fire_profile = get_or_create_fire_profile(conn, user_id)
+def _render_financial_assumptions(conn, user_id: int, fire_profile: dict) -> None:
+    st.subheader("Financial assumptions")
+    st.caption("Defaults used by FIRE planning. Detailed profile inputs remain in Financial Profile.")
+    with st.form("financial_assumptions_form"):
+        saved_variant = fire_profile.get("fire_variant")
+        fire_variant = st.selectbox(
+            "Default FIRE variant",
+            FIRE_VARIANTS,
+            index=FIRE_VARIANTS.index(saved_variant) if saved_variant in FIRE_VARIANTS else 1,
+            format_func=fire_variant_label,
+        )
+        spending_floor = st.number_input(
+            "FIRE spending floor",
+            min_value=0.0,
+            value=float(fire_profile.get("spending_floor") or 45000),
+            step=1000.0,
+        )
+        spending_ceiling = st.number_input(
+            "FIRE spending ceiling",
+            min_value=0.0,
+            value=float(fire_profile.get("spending_ceiling") or 65000),
+            step=1000.0,
+        )
+        if st.form_submit_button("Save financial assumptions", type="primary"):
+            save_fire_profile(
+                conn,
+                user_id,
+                fire_variant=fire_variant,
+                spending_floor=spending_floor,
+                spending_ceiling=spending_ceiling,
+            )
+            st.session_state.settings_notice = "Financial assumptions saved."
+            st.rerun()
 
-        profile_col, rules_col = st.columns([1, 1.4])
-        with profile_col:
-            st.subheader("Profile")
-            with st.form("profile_settings_form"):
-                st.text(f"Email: {user.get('email', '')}")
-                display_name = st.text_input("Name", value=user.get("name") or "")
-                variant_options = ["lean", "coast", "barista", "fat"]
-                fire_variant = st.selectbox(
-                    "Default FIRE variant",
-                    variant_options,
-                    index=variant_options.index(fire_profile.get("fire_variant")) if fire_profile.get("fire_variant") in variant_options else 1,
-                )
-                spending_floor = st.number_input(
-                    "FIRE spending floor",
-                    min_value=0.0,
-                    value=float(fire_profile.get("spending_floor") or 45000),
-                    step=1000.0,
-                )
-                spending_ceiling = st.number_input(
-                    "FIRE spending ceiling",
-                    min_value=0.0,
-                    value=float(fire_profile.get("spending_ceiling") or 65000),
-                    step=1000.0,
-                )
-                if st.form_submit_button("Save profile settings", type="primary"):
-                    updated_user = update_user_profile(user_id, name=display_name.strip() or None)
-                    save_fire_profile(
-                        conn,
-                        user_id,
-                        fire_variant=fire_variant,
-                        spending_floor=spending_floor,
-                        spending_ceiling=spending_ceiling,
-                    )
-                    if updated_user:
-                        st.session_state.user = updated_user
-                    st.success("Profile settings saved.")
+
+def _render_rules(conn, user_id: int, category_options: list[str]) -> None:
+    st.subheader("Categorization rules")
+    with st.container():
+        st.caption("User rules are checked before system defaults. Changes apply only to your account.")
+        with st.form("add_rule_form", clear_on_submit=True):
+            keyword = st.text_input("Keyword")
+            category = st.selectbox("Category", category_options)
+            priority = st.slider("Priority", min_value=0, max_value=100, value=50)
+            if st.form_submit_button("Add rule", type="primary"):
+                try:
+                    add_user_rule(conn, user_id, keyword, category, priority)
+                    st.session_state.settings_notice = "Rule added."
                     st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
 
-        with rules_col:
-            st.subheader("Categorization Rules")
-            st.caption("User rules are checked before the system defaults.")
-            category_options = get_user_categories(conn, user_id)
+        rules = list_category_rules(conn, user_id)
+        if not rules:
+            st.info("No categorization rules yet. Add a keyword rule above when you need one.")
+            return
 
-            with st.form("add_rule_form", clear_on_submit=True):
-                keyword = st.text_input("Keyword")
-                category = st.selectbox("Category", category_options)
-                priority = st.slider("Priority", min_value=0, max_value=100, value=50)
-                submitted = st.form_submit_button("Add rule", type="primary")
-                if submitted:
-                    try:
-                        add_user_rule(conn, user_id, keyword, category, priority)
-                        st.success("Rule added.")
-                        st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
-
-            rules = list_category_rules(conn, user_id)
-            if not rules:
-                st.info("No rules yet.")
-            else:
-                for rule_id, keyword, category, priority, source, enabled in rules:
-                    cols = st.columns([2.2, 1.5, 0.8, 0.8, 0.8])
-                    cols[0].write(keyword)
-                    cols[1].write(category)
-                    cols[2].write(priority)
-                    cols[3].write(source)
-                    if cols[4].button("Disable" if enabled else "Enable", key=f"toggle_rule_{rule_id}"):
-                        set_rule_enabled(conn, rule_id, user_id, not enabled)
-                        st.rerun()
-                    if source == "user":
-                        with st.expander(f"Edit rule: {keyword}"):
-                            with st.form(f"edit_rule_{rule_id}"):
-                                edited_keyword = st.text_input("Keyword", value=keyword)
-                                category_index = category_options.index(category) if category in category_options else 0
-                                edited_category = st.selectbox("Category", category_options, index=category_index)
-                                edited_priority = st.slider("Priority", 0, 100, int(priority))
-                                st.caption(
-                                    f"Preview: this keyword matches {count_rule_matches(conn, user_id, edited_keyword)} "
-                                    "existing transaction(s). Saving the rule will not recategorize them."
+        for rule_id, keyword, category, priority, source, enabled in rules:
+            with st.container(border=True):
+                st.markdown(f"**{keyword}** → **{category}**")
+                st.caption(
+                    f"Priority {priority} · {'System default' if source == 'system' else 'Your rule'} · "
+                    f"{'Enabled' if enabled else 'Disabled'}"
+                )
+                if st.button("Disable" if enabled else "Enable", key=f"toggle_rule_{rule_id}"):
+                    set_rule_enabled(conn, rule_id, user_id, not enabled)
+                    st.session_state.settings_notice = f"Rule {'enabled' if not enabled else 'disabled'}."
+                    st.rerun()
+                if source == "user":
+                    with st.expander("Edit or delete this rule"):
+                        with st.form(f"edit_rule_{rule_id}"):
+                            edited_keyword = st.text_input("Keyword", value=keyword)
+                            category_index = category_options.index(category) if category in category_options else 0
+                            edited_category = st.selectbox("Category", category_options, index=category_index)
+                            edited_priority = st.slider("Priority", 0, 100, int(priority))
+                            st.caption(
+                                f"Preview: this keyword matches {count_rule_matches(conn, user_id, edited_keyword)} "
+                                "existing transaction(s). Saving the rule will not recategorize them."
+                            )
+                            if st.form_submit_button("Save changes", type="primary"):
+                                update_user_rule(
+                                    conn,
+                                    rule_id,
+                                    user_id,
+                                    edited_keyword,
+                                    edited_category,
+                                    edited_priority,
                                 )
-                                edit_actions = st.columns(2)
-                                if edit_actions[0].form_submit_button("Save changes", type="primary"):
-                                    update_user_rule(
-                                        conn,
-                                        rule_id,
-                                        user_id,
-                                        edited_keyword,
-                                        edited_category,
-                                        edited_priority,
-                                    )
-                                    st.success("Rule updated. Existing transactions were not changed.")
-                                    st.rerun()
-                                if edit_actions[1].form_submit_button("Delete rule"):
-                                    delete_user_rule(conn, rule_id, user_id)
-                                    st.rerun()
+                                st.session_state.settings_notice = (
+                                    "Rule updated. Existing transactions were not changed."
+                                )
+                                st.rerun()
+                            if st.form_submit_button("Delete rule"):
+                                delete_user_rule(conn, rule_id, user_id)
+                                st.session_state.settings_notice = "Rule deleted."
+                                st.rerun()
 
-            st.divider()
-            st.subheader("Categories")
-            st.caption("Default categories remain available unless you disable them. Changes apply only to your account.")
-            with st.form("add_category_form", clear_on_submit=True):
-                new_category = st.text_input("New category")
-                if st.form_submit_button("Add category", type="primary"):
-                    try:
-                        add_user_category(conn, user_id, new_category)
-                        st.success("Category added.")
-                        st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
 
-            for category_row in list_user_categories(conn, user_id):
-                category_id = int(category_row["id"])
-                name = str(category_row["name"])
-                enabled = bool(category_row["is_enabled"])
-                cols = st.columns([2.5, 1, 1])
-                cols[0].write(name)
-                cols[1].caption("Default" if category_row["is_default"] else "Custom")
-                if cols[2].button("Disable" if enabled else "Enable", key=f"toggle_category_{category_id}"):
+def _render_categories(conn, user_id: int) -> None:
+    st.subheader("Categories")
+    with st.container():
+        st.caption("Default categories remain available unless disabled. Changes apply only to your account.")
+        with st.form("add_category_form", clear_on_submit=True):
+            new_category = st.text_input("New category")
+            if st.form_submit_button("Add category", type="primary"):
+                try:
+                    add_user_category(conn, user_id, new_category)
+                    st.session_state.settings_notice = "Category added."
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+
+        categories = list_user_categories(conn, user_id)
+        if not categories:
+            st.info("No categories are configured yet.")
+            return
+
+        for category_row in categories:
+            category_id = int(category_row["id"])
+            name = str(category_row["name"])
+            enabled = bool(category_row["is_enabled"])
+            with st.container(border=True):
+                st.markdown(f"**{name}**")
+                st.caption(
+                    f"{'Default' if category_row['is_default'] else 'Custom'} · "
+                    f"{'Enabled' if enabled else 'Disabled'}"
+                )
+                if st.button("Disable" if enabled else "Enable", key=f"toggle_category_{category_id}"):
                     try:
                         set_category_enabled(conn, user_id, category_id, not enabled)
+                        st.session_state.settings_notice = (
+                            f"Category {'enabled' if not enabled else 'disabled'}."
+                        )
                         st.rerun()
                     except ValueError as exc:
                         st.error(str(exc))
                 if not category_row["is_default"]:
-                    with st.expander(f"Rename category: {name}"):
+                    with st.expander("Rename this category"):
                         with st.form(f"rename_category_{category_id}"):
                             renamed = st.text_input("Category name", value=name)
                             if st.form_submit_button("Rename"):
                                 try:
                                     rename_user_category(conn, user_id, category_id, renamed)
-                                    st.success("Category renamed.")
+                                    st.session_state.settings_notice = "Category renamed."
                                     st.rerun()
                                 except ValueError as exc:
                                     st.error(str(exc))
 
-        st.divider()
-        st.subheader("Delete beta account")
+
+def _render_account_data(user: dict, user_id: int) -> None:
+    st.subheader("Account and data")
+    with st.container():
+        st.markdown("**Delete beta account**")
         st.warning(ACCOUNT_DELETION_NOTICE)
         with st.form("delete_beta_account_form"):
             confirmation = st.text_input(
@@ -201,5 +219,41 @@ def render() -> None:
                     st.rerun()
                 else:
                     st.error("The account could not be deleted. It may already have been removed.")
+
+
+def render() -> None:
+    st.title("Settings")
+    st.caption("Profile details, category rules, and the small places where defaults can go wrong.")
+
+    user = st.session_state.get("user", {})
+    if not user:
+        st.info("Log in to edit settings.")
+        return
+
+    notice = st.session_state.pop("settings_notice", None)
+    if notice:
+        st.success(notice)
+
+    user_id = int(user["id"])
+    conn = get_connection()
+    try:
+        seed_system_rules(conn, user_id)
+        seed_user_categories(conn, user_id)
+        fire_profile = get_or_create_fire_profile(conn, user_id)
+
+        category_options = get_user_categories(conn, user_id)
+        profile_tab, assumptions_tab, rules_tab, categories_tab, account_tab = st.tabs(
+            ["Profile", "Assumptions", "Rules", "Categories", "Account & data"]
+        )
+        with profile_tab:
+            _render_profile_settings(user, user_id)
+        with assumptions_tab:
+            _render_financial_assumptions(conn, user_id, fire_profile)
+        with rules_tab:
+            _render_rules(conn, user_id, category_options)
+        with categories_tab:
+            _render_categories(conn, user_id)
+        with account_tab:
+            _render_account_data(user, user_id)
     finally:
         conn.close()

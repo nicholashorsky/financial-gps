@@ -140,7 +140,7 @@ Import one persona per fresh test account so histories remain isolated and resul
 
 **Current:** Phase 8 — Final beta usability work and invited synthetic-data testing
 
-The deployed fresh-account smoke path has passed. Two beta-targeted usability issues remain before the invited synthetic-data beta is considered feature-complete; current details are maintained in [Current status](docs/CURRENT_STATUS.md).
+The deployed fresh-account smoke path has passed. One beta-targeted usability issue remains before the invited synthetic-data beta is considered feature-complete; current details are maintained in [Current status](docs/CURRENT_STATUS.md).
 
 Project documentation:
 
