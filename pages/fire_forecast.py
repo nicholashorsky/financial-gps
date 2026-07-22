@@ -39,6 +39,7 @@ def render() -> None:
             [
                 {
                     "Year": year.year,
+                    "Age": year.age,
                     "Employment": year.employment_income,
                     "CPP": year.cpp_received,
                     "OAS": year.oas_received,
@@ -48,6 +49,8 @@ def render() -> None:
                     "Taxable income": year.taxable_income,
                     "Withdrawals": sum(year.withdrawals.values()),
                     "Taxable withdrawals": year.taxable_withdrawals,
+                    "RRIF minimum": year.rrif_minimum_withdrawal,
+                    "RRIF balance": year.account_balances.get("rrif", 0.0),
                     "Tax parameters": year.parameter_year,
                     "Spending": year.total_spending,
                     "Net surplus": year.net_surplus,

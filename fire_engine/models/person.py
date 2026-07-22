@@ -17,3 +17,10 @@ class Person:
 
     def age_in_year(self, year: int) -> int:
         return year - self.date_of_birth.year
+
+    def age_at_start_of_year(self, year: int) -> int:
+        """Return age on January 1, used for prescribed RRIF factors."""
+        age = year - self.date_of_birth.year
+        if (self.date_of_birth.month, self.date_of_birth.day) > (1, 1):
+            age -= 1
+        return age

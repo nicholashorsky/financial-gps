@@ -116,6 +116,77 @@ class ProjectionTests(unittest.TestCase):
         self.assertGreater(result.withdrawals["tfsa"], 20000)
         self.assertAlmostEqual(result.net_surplus, 0.0, places=2)
 
+    def test_rrsp_converts_at_71_and_rrif_minimum_starts_the_next_year(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1957, 1, 1), province="ON"),
+            annual_spending=0.0,
+            spending_inflation=0.0,
+            start_year=2026,
+            accounts=[
+                InvestmentAccount(
+                    account_type="rrsp",
+                    current_balance=100000,
+                    annual_return=0.0,
+                )
+            ],
+        )
+
+        years = project_household(household, years=4)
+
+        self.assertIn("RRSP age-71 approaching", years[1].triggered_rules)
+        self.assertEqual(years[1].age, 70)
+        self.assertIn("RRSP converted to RRIF this year", years[2].triggered_rules)
+        self.assertEqual(years[2].age, 71)
+        self.assertEqual(years[2].rrif_minimum_withdrawal, 0.0)
+        self.assertEqual(years[2].account_balances["rrif"], 100000.0)
+        self.assertEqual(years[3].rrif_minimum_withdrawal, 5400.0)
+        self.assertEqual(years[3].taxable_withdrawals, 5400.0)
+        self.assertEqual(years[3].taxable_income, 5400.0)
+        self.assertEqual(years[3].account_balances["rrif"], 94600.0)
+        self.assertIn("RRIF minimum withdrawal in effect", years[3].triggered_rules)
+
+    def test_projection_starting_after_71_applies_rrif_minimum_immediately(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1954, 1, 1), province="ON"),
+            annual_spending=0.0,
+            spending_inflation=0.0,
+            start_year=2026,
+            accounts=[
+                InvestmentAccount(
+                    account_type="rrsp",
+                    current_balance=100000,
+                    annual_return=0.0,
+                )
+            ],
+        )
+
+        result = project_household(household, years=1)[0]
+
+        self.assertEqual(result.rrif_minimum_withdrawal, 5400.0)
+        self.assertEqual(result.account_balances["rrif"], 94600.0)
+        self.assertNotIn("RRSP converted to RRIF this year", result.triggered_rules)
+        self.assertIn("RRIF minimum withdrawal in effect", result.triggered_rules)
+
+    def test_first_rrif_minimum_uses_age_at_start_of_year(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1957, 7, 1), province="ON"),
+            annual_spending=0.0,
+            spending_inflation=0.0,
+            start_year=2028,
+            accounts=[
+                InvestmentAccount(
+                    account_type="rrsp",
+                    current_balance=100000,
+                    annual_return=0.0,
+                )
+            ],
+        )
+
+        years = project_household(household, years=2)
+
+        self.assertEqual(years[0].rrif_minimum_withdrawal, 0.0)
+        self.assertEqual(years[1].rrif_minimum_withdrawal, 5280.0)
+
 
 if __name__ == "__main__":
     unittest.main()

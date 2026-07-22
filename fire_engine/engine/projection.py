@@ -10,6 +10,11 @@ from fire_engine.calculators.federal_tax import calculate_federal_tax
 from fire_engine.calculators.gis_estimator import estimate_gis
 from fire_engine.calculators.oas_estimator import estimate_oas_monthly
 from fire_engine.calculators.provincial_tax_on import calculate_ontario_tax
+from fire_engine.calculators.rrif_minimum import (
+    RRIF_CONVERSION_AGE,
+    RRIF_MINIMUM_START_AGE,
+    calculate_rrif_minimum,
+)
 from fire_engine.engine.rules import evaluate_rules
 from fire_engine.models.benefit_enrollment import BenefitEnrollment
 from fire_engine.models.household import Household
@@ -25,6 +30,7 @@ MONEY_TOLERANCE = 0.01
 @dataclass(frozen=True)
 class ProjectionYear:
     year: int
+    age: int
     employment_income: float
     cpp_received: float
     oas_received: float
@@ -35,6 +41,8 @@ class ProjectionYear:
     taxable_income: float
     withdrawals: dict[str, float]
     taxable_withdrawals: float
+    rrif_minimum_withdrawal: float
+    account_balances: dict[str, float]
     parameter_year: int
     uses_parameter_fallback: bool
     net_surplus: float
@@ -63,6 +71,14 @@ def _taxable_withdrawal_total(withdrawals: dict[str, float]) -> float:
     )
 
 
+def _account_balances_by_type(accounts: list[InvestmentAccount]) -> dict[str, float]:
+    balances: dict[str, float] = {}
+    for account in accounts:
+        account_type = account.account_type.lower()
+        balances[account_type] = balances.get(account_type, 0.0) + account.current_balance
+    return {account_type: round(balance, 2) for account_type, balance in balances.items()}
+
+
 def project_household(household: Household, years: int = 40) -> list[ProjectionYear]:
     """Project annual cash flow using a bounded withdrawal/tax calculation.
 
@@ -78,7 +94,37 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
     for offset in range(years):
         year = household.start_year + offset
         age = household.primary.age_in_year(year)
+        age_at_start_of_year = household.primary.age_at_start_of_year(year)
         resolved_params = get_params_or_2026_fallback(year, household.primary.province)
+        rrif_converted = False
+        for account in accounts:
+            if account.account_type.lower() == "rrsp" and age >= RRIF_CONVERSION_AGE:
+                account.account_type = "rrif"
+                account.rrif_conversion_year = (
+                    year if age == RRIF_CONVERSION_AGE else year - 1
+                )
+                rrif_converted = age == RRIF_CONVERSION_AGE
+
+        rrif_minimum_withdrawal = 0.0
+        for account in accounts:
+            minimum_applies = (
+                account.account_type.lower() == "rrif"
+                and age >= RRIF_MINIMUM_START_AGE
+                and (
+                    account.rrif_conversion_year is None
+                    or year > account.rrif_conversion_year
+                )
+            )
+            if not minimum_applies:
+                continue
+            minimum = calculate_rrif_minimum(
+                age_at_start_of_year,
+                account.current_balance,
+            )
+            withdrawal = min(minimum.minimum_withdrawal, account.current_balance)
+            account.current_balance -= withdrawal
+            rrif_minimum_withdrawal += withdrawal
+
         employment_income = round(sum(source.amount_for_year(year) for source in household.income_sources), 2)
 
         cpp_enrollment = benefits.get("CPP")
@@ -106,6 +152,8 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
         base_taxable_income = employment_income + cpp_received + oas_received
         annual_spending = household.annual_spending * ((1 + household.spending_inflation) ** offset)
         withdrawals: dict[str, float] = {}
+        if rrif_minimum_withdrawal > 0:
+            withdrawals["rrif"] = rrif_minimum_withdrawal
         withdrawal_tax_limit_reached = False
 
         for _ in range(MAX_WITHDRAWAL_TAX_ITERATIONS):
@@ -183,10 +231,12 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
         for account in accounts:
             account.grow_one_year()
         net_worth = round(sum(account.current_balance for account in accounts), 2)
+        account_balances = _account_balances_by_type(accounts)
 
         results.append(
             ProjectionYear(
                 year=year,
+                age=age,
                 employment_income=round(employment_income, 2),
                 cpp_received=round(cpp_received, 2),
                 oas_received=round(oas_received, 2),
@@ -197,11 +247,19 @@ def project_household(household: Household, years: int = 40) -> list[ProjectionY
                 taxable_income=round(taxable_income, 2),
                 withdrawals={account_type: round(amount, 2) for account_type, amount in withdrawals.items()},
                 taxable_withdrawals=round(taxable_withdrawals, 2),
+                rrif_minimum_withdrawal=round(rrif_minimum_withdrawal, 2),
+                account_balances=account_balances,
                 parameter_year=resolved_params.parameter_year,
                 uses_parameter_fallback=resolved_params.uses_fallback,
                 net_surplus=round(net_surplus, 2),
                 net_worth=net_worth,
-                triggered_rules=evaluate_rules(year, household, taxable_income),
+                triggered_rules=evaluate_rules(
+                    year,
+                    household,
+                    taxable_income,
+                    rrif_converted=rrif_converted,
+                    rrif_minimum_withdrawal=rrif_minimum_withdrawal,
+                ),
                 sequencer_notes=sequencer_notes,
             )
         )
