@@ -3,6 +3,7 @@
 import os
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -108,6 +109,26 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                 app = self.click_button(app, navigation_label)
                 self.assertEqual(app.session_state["page"], expected_page)
                 self.assert_no_streamlit_exception(app)
+
+                if expected_page == "Financial Profile":
+                    province = next(field for field in app.selectbox if field.label == "Province of residence")
+                    birth_date = next(field for field in app.date_input if field.label == "Complete date of birth")
+                    gross_income = next(
+                        field for field in app.number_input if field.label == "Annual gross employment income"
+                    )
+                    province.select("ON")
+                    birth_date.set_value(date(1988, 6, 15))
+                    gross_income.set_value(85000.0)
+                    app = self.click_button(app, "Save profile")
+                    self.assert_no_streamlit_exception(app)
+
+                    with db_module.get_connection() as connection:
+                        saved_profile = connection.execute(
+                            "SELECT province, date_of_birth FROM fire_profiles WHERE user_id = ?",
+                            (int(app.session_state["user"]["id"]),),
+                        ).fetchone()
+                    self.assertEqual(saved_profile["province"], "ON")
+                    self.assertEqual(saved_profile["date_of_birth"], "1988-06-15")
 
 
 if __name__ == "__main__":

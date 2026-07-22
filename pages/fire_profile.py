@@ -24,12 +24,12 @@ ACCOUNT_TYPES = ["TFSA", "RRSP", "FHSA", "taxable", "HISA"]
 
 
 def _source_badge(is_override: object) -> str:
-    return "Edited" if int(is_override or 0) == 1 else "From your transactions"
+    return "✏️ Edited" if int(is_override or 0) == 1 else "📊 From your transactions"
 
 
 def render() -> None:
     st.title("FIRE Planner - Financial Profile")
-    st.caption("Review the bridge defaults, override what feels unrealistic, and set the pieces the engine cannot infer.")
+    st.caption("Tell the forecast about you, your normal spending, and the accounts funding your plan.")
 
     user = st.session_state.get("user")
     if not user:
@@ -45,27 +45,70 @@ def render() -> None:
         accounts = list_investment_accounts(conn, user_id)
 
         with st.form("fire_profile_form"):
+            st.subheader("1. About you")
+            st.caption("These details control tax assumptions and the timing of CPP, OAS, and registered-account rules.")
             left, right = st.columns(2)
             with left:
-                province = st.selectbox("Province", ["", "ON", "BC", "AB", "QC"], index=["", "ON", "BC", "AB", "QC"].index(profile.get("province") or ""))
+                province = st.selectbox(
+                    "Province of residence",
+                    ["", "ON", "BC", "AB", "QC"],
+                    index=["", "ON", "BC", "AB", "QC"].index(profile.get("province") or ""),
+                    help="Used to select provincial tax assumptions. Choose where you currently live.",
+                )
                 dob_value = date.fromisoformat(profile["date_of_birth"]) if profile.get("date_of_birth") else date(1990, 1, 1)
-                dob = st.date_input("Date of birth", value=dob_value)
+                dob = st.date_input(
+                    "Complete date of birth",
+                    value=dob_value,
+                    min_value=date(1900, 1, 1),
+                    max_value=date.today(),
+                    format="YYYY-MM-DD",
+                    help="Enter the year, month, and day. The forecast uses your exact age for benefit and RRIF timing.",
+                )
+            with right:
+                resident = st.checkbox(
+                    "I currently live in Canada",
+                    value=bool(profile.get("is_canadian_resident", 1)),
+                    help="Current residency can affect registered-account room and benefit assumptions.",
+                )
+                saved_years = profile.get("years_in_canada_post_18")
                 years_in_canada = st.number_input(
-                    "Years in Canada after age 18",
+                    "Years lived in Canada since age 18",
                     min_value=0,
                     max_value=60,
-                    value=int(profile.get("years_in_canada_post_18") or 40),
+                    value=int(saved_years if saved_years is not None else 40),
+                    help="OAS is generally based on years of Canadian residence after age 18. Enter your best current estimate, up to 40 for a full-pension estimate.",
                 )
-                resident = st.checkbox("Canadian resident", value=bool(profile.get("is_canadian_resident", 1)))
-            with right:
-                st.markdown("**Income defaults**")
+                st.caption("This is separate from citizenship. It helps estimate OAS eligibility and the pension amount.")
+
+            st.subheader("2. Income used by the forecast")
+            st.caption("Enter income before income tax, CPP, EI, benefit deductions, or other payroll deductions.")
+            income_left, income_right = st.columns([1, 1])
+            with income_left:
                 employment_row = next((row for row in income_sources if row["source_type"] == "employment"), None)
                 employment_amount = float(employment_row["annual_amount"] or 0) if employment_row else 0.0
-                employment_income = st.number_input("Employment income", min_value=0.0, value=employment_amount, step=1000.0)
+                employment_income = st.number_input(
+                    "Annual gross employment income",
+                    min_value=0.0,
+                    value=employment_amount,
+                    step=1000.0,
+                    help="Use your expected annual salary or other employment income before deductions.",
+                )
                 if employment_row:
                     st.caption(_source_badge(employment_row.get("is_override")))
+                    if not bool(employment_row.get("is_override")):
+                        st.warning(
+                            "This starting value was estimated from bank deposits, which are usually after tax. "
+                            "Replace it with gross annual income for a more useful forecast."
+                        )
+            with income_right:
+                st.info(
+                    "Taxes are not imported from your bank deposits. The FIRE forecast estimates federal and "
+                    "provincial income tax from this gross amount, then adds any taxable retirement withdrawals."
+                )
+                st.caption("You can review CPP and OAS estimates separately in Benefits Workspace.")
 
-            st.markdown("**Monthly spending baseline**")
+            st.subheader("3. Normal monthly spending")
+            st.caption("Transaction-derived amounts are a starting point. Edit any category that is not representative of a normal month.")
             spending_inputs: list[tuple[str, float, bool]] = []
             if not spending_rows:
                 st.info("No spending baseline yet. Import transactions or start entering categories here.")
@@ -88,7 +131,8 @@ def render() -> None:
                     st.caption(_source_badge(row.get("is_override")))
                     spending_inputs.append((row["category"], amount, True))
 
-            st.markdown("**Account balances**")
+            st.subheader("4. Investment and savings balances")
+            st.caption("Enter current balances. These are planning values and do not alter imported bank transactions.")
             account_inputs: list[tuple[str, float]] = []
             account_map = {row["account_type"]: row for row in accounts}
             acct_cols = st.columns(len(ACCOUNT_TYPES))

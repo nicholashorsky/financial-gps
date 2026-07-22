@@ -49,9 +49,16 @@ def _render_current_step(step: dict[str, object], is_complete: bool) -> None:
     elif label == "Create a goal":
         st.write("Give the forecast something to aim at: emergency fund, house fund, vacation, retirement, or anything else with a target.")
     elif label == "Set FIRE profile basics":
-        st.write("Add province and date of birth so the Canadian FIRE engine can stop guessing about tax and benefit timing.")
+        st.write(
+            "Set your complete date of birth and province, then explain your Canadian residency history. "
+            "These details drive tax, benefit, and RRIF timing."
+        )
+        st.caption("The profile screen explains each field before you save it.")
     elif label == "Review FIRE income defaults":
-        st.write("Check the income that came from your CSV and override anything that does not represent a normal month.")
+        st.write(
+            "Replace transaction-derived pay deposits with your annual gross employment income before tax and payroll deductions. "
+            "The FIRE forecast calculates estimated income tax separately."
+        )
 
     if is_complete:
         st.success("This step is complete.")
