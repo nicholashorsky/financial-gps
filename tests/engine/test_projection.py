@@ -6,6 +6,8 @@ from datetime import date
 from pathlib import Path
 
 from fire_engine.engine.projection import project_household
+from fire_engine.calculators.federal_tax import calculate_federal_tax
+from fire_engine.calculators.provincial_tax_on import calculate_ontario_tax
 from fire_engine.models.benefit_enrollment import BenefitEnrollment
 from fire_engine.models.household import Household
 from fire_engine.models.income_source import IncomeSource
@@ -45,6 +47,70 @@ class ProjectionTests(unittest.TestCase):
         household = _load_household_fixture("household_couple_gis_eligible.json")
         years = project_household(household, years=5)
         self.assertTrue(any(year.gis_received > 0 for year in years))
+
+    def test_rrsp_withdrawal_covers_spending_and_its_own_tax_cost(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1976, 1, 1), province="ON"),
+            annual_spending=80000,
+            spending_inflation=0.0,
+            start_year=2026,
+            income_sources=[
+                IncomeSource(
+                    source_type="employment",
+                    annual_amount=60000,
+                    start_year=2026,
+                    inflation_rate=0.0,
+                )
+            ],
+            accounts=[
+                InvestmentAccount(
+                    account_type="rrsp",
+                    current_balance=100000,
+                    annual_return=0.0,
+                )
+            ],
+        )
+
+        result = project_household(household, years=1)[0]
+        base_tax = (
+            calculate_federal_tax(60000).federal_tax
+            + calculate_ontario_tax(60000).provincial_tax
+        )
+
+        self.assertGreater(result.taxable_withdrawals, 20000 + base_tax)
+        self.assertEqual(result.taxable_income, 60000 + result.taxable_withdrawals)
+        self.assertEqual(result.withdrawals["rrsp"], result.taxable_withdrawals)
+        self.assertAlmostEqual(result.net_surplus, 0.0, places=2)
+
+    def test_tfsa_withdrawal_does_not_increase_taxable_income(self) -> None:
+        household = Household(
+            primary=Person(name="User", date_of_birth=date(1976, 1, 1), province="ON"),
+            annual_spending=80000,
+            spending_inflation=0.0,
+            start_year=2026,
+            income_sources=[
+                IncomeSource(
+                    source_type="employment",
+                    annual_amount=60000,
+                    start_year=2026,
+                    inflation_rate=0.0,
+                )
+            ],
+            accounts=[
+                InvestmentAccount(
+                    account_type="tfsa",
+                    current_balance=100000,
+                    annual_return=0.0,
+                )
+            ],
+        )
+
+        result = project_household(household, years=1)[0]
+
+        self.assertEqual(result.taxable_income, 60000)
+        self.assertEqual(result.taxable_withdrawals, 0.0)
+        self.assertGreater(result.withdrawals["tfsa"], 20000)
+        self.assertAlmostEqual(result.net_surplus, 0.0, places=2)
 
 
 if __name__ == "__main__":
