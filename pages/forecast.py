@@ -10,6 +10,13 @@ from budget.narrator import forecast_message
 from shared.db import get_connection
 
 
+BAND_EXPLANATIONS = {
+    "Conservative": "Lower return; positive cash flow is reduced by inflation, while a deficit is increased by it.",
+    "Expected": "Expected return; uses the current cash-flow trend with the existing income-growth adjustment.",
+    "Optimistic": "Higher return; positive cash flow is increased by income growth, while a deficit is reduced by it.",
+}
+
+
 def _current_net_worth(conn, user_id: int) -> float:
     rows = conn.execute(
         """
@@ -20,6 +27,51 @@ def _current_net_worth(conn, user_id: int) -> float:
         (user_id,),
     ).fetchone()
     return float(rows["total"] or 0)
+
+
+def _monthly_cash_flow(conn, user_id: int) -> tuple[float, int]:
+    """Return average monthly cash flow and the number of usable observed months."""
+
+    row = conn.execute(
+        """
+        SELECT
+            COUNT(DISTINCT SUBSTR(date, 1, 7)) AS observed_months,
+            COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS income_total,
+            COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS spending_total
+        FROM transactions
+        WHERE user_id = ?
+          AND is_excluded = 0
+          AND COALESCE(category, '') <> 'Transfer'
+          AND COALESCE(transaction_type, '') NOT IN ('transfer', 'transfer_in', 'transfer_out')
+        """,
+        (user_id,),
+    ).fetchone()
+    observed_months = int(row["observed_months"] or 0)
+    if observed_months == 0:
+        return 0.0, 0
+    total_cash_flow = float(row["income_total"] or 0) - float(row["spending_total"] or 0)
+    return total_cash_flow / observed_months, observed_months
+
+
+def _forecast_state(net_worth: float, observed_months: int) -> str:
+    return "needs_setup" if net_worth == 0 and observed_months == 0 else "configured"
+
+
+def _band_contributions(monthly_surplus: float, income_growth: float, inflation: float) -> dict[str, float]:
+    """Return fixed annual cash-flow assumptions while preserving positive-case behavior."""
+
+    annual_cash_flow = monthly_surplus * 12
+    if annual_cash_flow >= 0:
+        return {
+            "Conservative": annual_cash_flow * (1 - inflation),
+            "Expected": annual_cash_flow * ((1 + income_growth) ** 0.5),
+            "Optimistic": annual_cash_flow * (1 + income_growth),
+        }
+    return {
+        "Conservative": annual_cash_flow * (1 + inflation),
+        "Expected": annual_cash_flow,
+        "Optimistic": annual_cash_flow * max(1 - income_growth, 0),
+    }
 
 
 def _annual_projection(start_value: float, yearly_contrib: float, years: int, annual_return: float) -> list[float]:
@@ -67,17 +119,28 @@ def render() -> None:
     conn = get_connection()
     try:
         net_worth = _current_net_worth(conn, user_id)
-        summary_row = conn.execute(
-            """
-            SELECT
-                COALESCE(SUM(CASE WHEN amount > 0 AND is_excluded = 0 THEN amount ELSE 0 END), 0) AS income_total,
-                COALESCE(SUM(CASE WHEN amount < 0 AND is_excluded = 0 THEN ABS(amount) ELSE 0 END), 0) AS spending_total
-            FROM transactions
-            WHERE user_id = ?
-            """,
-            (user_id,),
-        ).fetchone()
-        monthly_surplus = float(summary_row["income_total"] or 0) - float(summary_row["spending_total"] or 0)
+        monthly_surplus, observed_months = _monthly_cash_flow(conn, user_id)
+
+        if _forecast_state(net_worth, observed_months) == "needs_setup":
+            st.warning(
+                "Your forecast needs a starting balance or transaction history before its lines mean anything. "
+                "Import transactions and review account balances in Spending."
+            )
+            if st.button("Set up forecast inputs", type="primary"):
+                st.session_state.page = "Spending"
+                st.rerun()
+            return
+
+        metric_left, metric_right = st.columns(2)
+        metric_left.metric("Starting net worth", f"${net_worth:,.0f}")
+        metric_right.metric("Average monthly cash flow", f"${monthly_surplus:,.0f}")
+        if observed_months:
+            st.caption(
+                f"Cash flow is the average of {observed_months} imported month{'s' if observed_months != 1 else ''}; "
+                "excluded transactions and transfers are not counted."
+            )
+        else:
+            st.info("No usable transaction history was found, so this is a balance-growth-only forecast.")
 
         st.subheader("Assumptions")
         col1, col2, col3 = st.columns(3)
@@ -88,14 +151,35 @@ def render() -> None:
         inflation = st.slider("Inflation", 0.0, 0.08, 0.025, 0.005)
         years = st.slider("Projection horizon (years)", 10, 40, 30)
 
-        yearly_contrib = max(monthly_surplus, 0) * 12
-        adjusted_expected_contrib = yearly_contrib * ((1 + income_growth) ** 0.5)
-        if monthly_surplus < 0:
-            adjusted_expected_contrib = monthly_surplus * 12
+        returns = {
+            "Conservative": conservative_return,
+            "Expected": expected_return,
+            "Optimistic": optimistic_return,
+        }
+        contributions = _band_contributions(monthly_surplus, income_growth, inflation)
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Band": band,
+                        "Annual return": f"{returns[band]:.1%}",
+                        "Annual cash flow": f"${contributions[band]:,.0f}",
+                        "How it differs": BAND_EXPLANATIONS[band],
+                    }
+                    for band in ("Conservative", "Expected", "Optimistic")
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
-        conservative = _projection_frame(net_worth, yearly_contrib * (1 - inflation), years, conservative_return, "Conservative")
-        expected = _projection_frame(net_worth, adjusted_expected_contrib, years, expected_return, "Expected")
-        optimistic = _projection_frame(net_worth, yearly_contrib * (1 + income_growth), years, optimistic_return, "Optimistic")
+        conservative = _projection_frame(
+            net_worth, contributions["Conservative"], years, conservative_return, "Conservative"
+        )
+        expected = _projection_frame(net_worth, contributions["Expected"], years, expected_return, "Expected")
+        optimistic = _projection_frame(
+            net_worth, contributions["Optimistic"], years, optimistic_return, "Optimistic"
+        )
 
         frame = conservative.merge(expected, on="Year").merge(optimistic, on="Year")
 
@@ -115,6 +199,11 @@ def render() -> None:
             figure.add_annotation(x=year, y=target, text=f"${target:,.0f}", showarrow=True, arrowhead=1, yshift=10)
 
         st.plotly_chart(figure, use_container_width=True)
+        if monthly_surplus < 0:
+            st.warning(
+                "This projection declines because your imported spending currently exceeds imported income. "
+                "All three bands continue that shortfall. Values below $0 represent projected net debt, not a missing forecast line."
+            )
         conservative_horizon = next(
             (int(year) for year, target in _milestones(frame, "Expected", [100000]) if target == 100000),
             None,
