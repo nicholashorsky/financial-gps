@@ -10,6 +10,7 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 
 import shared.db as db_module
+from shared.beta_policy import SYNTHETIC_DATA_NOTICE
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +134,20 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                         ).fetchone()
                     self.assertEqual(saved_profile["province"], "ON")
                     self.assertEqual(saved_profile["date_of_birth"], "1988-06-15")
+                elif expected_page == "Settings":
+                    self.assertTrue(
+                        any(button.label == "Permanently delete account" for button in app.button)
+                    )
+
+    def test_registration_displays_synthetic_data_notice(self):
+        app = AppTest.from_file(str(APP_PATH)).run(timeout=30)
+
+        app = self.click_button(app, "Create an account")
+
+        self.assert_no_streamlit_exception(app)
+        self.assertTrue(
+            any(message.value == SYNTHETIC_DATA_NOTICE for message in app.warning)
+        )
 
 
 if __name__ == "__main__":

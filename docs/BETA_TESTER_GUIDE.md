@@ -22,6 +22,8 @@ Report defects through [GitHub Issues](https://github.com/nicholashorsky/financi
 
 Do not attach CSV files, screenshots containing credentials, database files, secrets, or any real personal information. For access or account-deletion help, contact the maintainer through the private invitation channel rather than posting credentials publicly.
 
+Financial GPS stores the uploaded filename as import-history metadata and stores parsed transactions. It does not persist a copy of the uploaded source CSV.
+
 ## Account deletion
 
 Testers can open **Settings → Delete beta account**, enter their account email, acknowledge the warning, and permanently delete the account. Foreign-key cascades remove associated test records from the active database.

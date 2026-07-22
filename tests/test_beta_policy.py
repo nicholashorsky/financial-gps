@@ -64,6 +64,22 @@ class BetaPolicyTests(unittest.TestCase):
                 "INSERT INTO goals (user_id, name, target_amount) VALUES (?, ?, 100)",
                 (owner_id, suffix),
             )
+            self.conn.execute(
+                "INSERT INTO import_batches (user_id, filename, format_name) VALUES (?, ?, 'generic')",
+                (owner_id, f"{suffix}.csv"),
+            )
+            self.conn.execute(
+                "INSERT INTO category_rules (user_id, keyword, category) VALUES (?, ?, 'Other')",
+                (owner_id, suffix),
+            )
+            self.conn.execute(
+                "INSERT INTO scenarios (id, user_id, name, scenario_type) VALUES (?, ?, ?, 'synthetic')",
+                (f"scenario-{suffix}", owner_id, suffix),
+            )
+            self.conn.execute(
+                "INSERT INTO fire_profiles (id, user_id) VALUES (?, ?)",
+                (f"profile-{suffix}", owner_id),
+            )
         self.conn.commit()
 
         self.assertTrue(delete_user_account(user_id))
@@ -72,7 +88,15 @@ class BetaPolicyTests(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM users WHERE id = ?", (user_id,)).fetchone()[0],
             0,
         )
-        for table in ("accounts", "transactions", "goals"):
+        for table in (
+            "accounts",
+            "transactions",
+            "goals",
+            "import_batches",
+            "category_rules",
+            "scenarios",
+            "fire_profiles",
+        ):
             self.assertEqual(
                 self.conn.execute(
                     f"SELECT COUNT(*) FROM {table} WHERE user_id = ?",

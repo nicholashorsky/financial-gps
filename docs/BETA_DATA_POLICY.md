@@ -21,7 +21,7 @@ The SQLite beta is demo-grade and non-durable:
 * When preserving a test state is useful, stop the app and copy the database to protected storage before deployment or a schema change.
 * Restore the matching database copy together with its matching application revision; otherwise start with an empty synthetic database.
 * Delete inactive tester accounts after 90 days and all beta data no later than 30 days after this synthetic beta ends. Honour earlier deletion requests where practical.
-* Do not retain uploaded CSV files after processing. Financial GPS currently processes uploads in memory and stores parsed transaction records, not the source file.
+* Do not persistently retain uploaded CSV files after processing. Financial GPS processes uploads in memory and stores the filename metadata and parsed transaction records, not a copy of the source file.
 
 Backups follow the same synthetic-only restriction and retention schedule. The maintainer may delete all beta data at any time.
 
@@ -44,6 +44,8 @@ A future PostgreSQL connection string must be supplied through a protected secre
 Use this notice in tester invitations, registration or first run, beside CSV upload, and in beta documentation:
 
 > Financial GPS is an early beta for synthetic sample data only. Do not upload real banking, credit-card, tax, account, or other personal financial information. Beta data may be deleted or reset without notice and has no backup or recovery guarantee. Financial GPS is not a system of record or a substitute for financial, tax, or investment advice.
+
+Operational language and procedures are maintained in the [Synthetic Beta Tester Guide](BETA_TESTER_GUIDE.md) and [Synthetic Beta Retention Runbook](BETA_RETENTION_RUNBOOK.md).
 
 ## PostgreSQL migration trigger
 
