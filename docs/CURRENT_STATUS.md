@@ -1,8 +1,8 @@
 # Financial GPS Current Status
 
-**Updated:** July 22, 2026
+**Updated:** July 23, 2026
 **Current branch:** `main`  
-**Current phase:** Beta exit validation  
+**Current phase:** Invited synthetic-data beta
 **Project board:** [Financial GPS Development](https://github.com/users/nicholashorsky/projects/1)
 
 ## Main objective
@@ -28,17 +28,20 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Added a user-scoped Service Canada CPP estimate override with separate start-age modeling and visible source guidance.
 * Added neutral Lean, Coast, Barista, and Fat FIRE guidance while preserving existing saved selections.
 * Reorganized Settings into horizontal Profile, Assumptions, Rules, Categories, and Account & data tabs with persistent confirmations.
+* Completed the narrow-viewport audit with compact mobile typography, spacing, metrics, and spending-chart presentation.
 
 ## Current focus
 
-The immediate focus is completing the remaining beta usability work:
+The beta-exit backlog is complete. The immediate focus is operating a controlled invited beta:
 
-1. Complete the final narrow-viewport audit after the interface changes ([Issue #14](https://github.com/nicholashorsky/financial-gps/issues/14)).
-2. Keep real financial data outside the application until the PostgreSQL readiness work is complete.
+1. Keep testing limited to synthetic financial data.
+2. Gather structured tester feedback through GitHub Issues.
+3. Refine mobile presentation later where testing identifies meaningful usability problems.
+4. Prepare the PostgreSQL, migration, backup, and isolation work required before real-data testing.
 
 ## Release readiness
 
-The deployed fresh-account path and synthetic-data storage boundary are approved. Once Issue #14 is resolved and the regression suite remains green, the invited synthetic-data beta can be treated as feature-complete. Ready work is visible in the [project board](https://github.com/users/nicholashorsky/projects/1).
+The deployed fresh-account path, synthetic-data storage boundary, and narrow-viewport audit are approved. The invited synthetic-data beta is feature-complete, with further mobile refinement intentionally deferred rather than treated as a beta blocker. Ready work is visible in the [project board](https://github.com/users/nicholashorsky/projects/1).
 
 ## Blockers and undecided questions
 
@@ -49,8 +52,8 @@ The deployed fresh-account path and synthetic-data storage boundary are approved
 
 Current automated and deployment validation:
 
-* 91 automated tests pass.
-* 21 Streamlit navigation subtests pass.
+* 92 automated tests pass.
+* 25 Streamlit navigation subtests pass.
 * Ruff reports no issues.
 * The original sample import creates 118 transactions across four accounts in an isolated smoke test.
 * Eight additional synthetic personas parse to their documented 1,463 total transactions with no invalid rows or parser warnings.
