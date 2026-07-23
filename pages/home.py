@@ -80,12 +80,23 @@ def render() -> None:
                     months_to_next_goal = int((remaining + monthly_contribution - 1) // monthly_contribution)
 
         fire_year = estimate_fire_date(conn, user_id)
-        cols = st.columns(5)
-        cols[0].metric("Transactions", summary.transaction_count)
-        cols[1].metric("Savings rate", f"{savings_rate:.1%}")
-        cols[2].metric("Monthly surplus", format_currency(summary.income_total - summary.spending_total))
-        cols[3].metric("Months to next goal", months_to_next_goal if months_to_next_goal is not None else "n/a")
-        cols[4].metric("FIRE date", fire_year if fire_year is not None else "n/a")
+        primary_metrics = st.columns(3)
+        primary_metrics[0].metric("Transactions", summary.transaction_count)
+        primary_metrics[1].metric("Savings rate", f"{savings_rate:.1%}")
+        primary_metrics[2].metric(
+            "Monthly surplus",
+            format_currency(summary.income_total - summary.spending_total),
+        )
+
+        planning_metrics = st.columns(2)
+        planning_metrics[0].metric(
+            "Months to next goal",
+            months_to_next_goal if months_to_next_goal is not None else "n/a",
+        )
+        planning_metrics[1].metric(
+            "FIRE date",
+            fire_year if fire_year is not None else "n/a",
+        )
 
         if summary.transaction_count == 0:
             empty_state(

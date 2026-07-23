@@ -7,6 +7,56 @@ from collections.abc import Callable
 import streamlit as st
 
 
+def apply_responsive_styles() -> None:
+    """Keep Streamlit's native layout readable without wasting phone space."""
+    st.markdown(
+        """
+        <style>
+        @media (max-width: 640px) {
+            [data-testid="stMainBlockContainer"] {
+                padding: 1rem 1rem 2rem;
+            }
+
+            [data-testid="stMainBlockContainer"] h1 {
+                font-size: 2rem;
+                line-height: 1.15;
+                margin-bottom: 0.25rem;
+            }
+
+            [data-testid="stMainBlockContainer"] h2 {
+                font-size: 1.5rem;
+                line-height: 1.2;
+            }
+
+            [data-testid="stMainBlockContainer"] h3 {
+                font-size: 1.2rem;
+                line-height: 1.25;
+            }
+
+            [data-testid="stHorizontalBlock"] {
+                gap: 0.5rem;
+            }
+
+            [data-testid="stMetric"] {
+                padding: 0.125rem 0;
+            }
+
+            [data-testid="stMetricLabel"] {
+                font-size: 0.875rem;
+                line-height: 1.2;
+            }
+
+            [data-testid="stMetricValue"] {
+                font-size: 1.75rem;
+                line-height: 1.15;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def page_header(
     title: str,
     description: str,

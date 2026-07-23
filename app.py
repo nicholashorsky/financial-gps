@@ -24,6 +24,7 @@ from pages import (
 )
 from shared.db import get_connection, init_db
 from shared.onboarding_service import should_force_onboarding
+from shared.ui import apply_responsive_styles
 
 st.set_page_config(
     page_title="Financial GPS",
@@ -32,6 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+apply_responsive_styles()
 init_db()
 
 NAV_ITEMS: dict[str, tuple[str, str]] = {

@@ -431,7 +431,17 @@ def _render_category_chart(summary) -> None:
 
     categories = [row["category"] or "Other" for row in summary.spending_by_category]
     totals = [float(row["total"] or 0) for row in summary.spending_by_category]
-    figure = go.Figure(data=[go.Pie(labels=categories, values=totals, hole=0.45)])
+    figure = go.Figure(
+        data=[
+            go.Pie(
+                labels=categories,
+                values=totals,
+                hole=0.45,
+                textinfo="none",
+                hovertemplate="%{label}<br>$%{value:,.2f} (%{percent})<extra></extra>",
+            )
+        ]
+    )
     figure.update_layout(title="Current Month Spending Mix", height=340, margin=dict(l=20, r=20, t=40, b=20))
     style_figure(figure, height=340)
     st.plotly_chart(figure, use_container_width=True)

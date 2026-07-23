@@ -86,10 +86,10 @@ def render() -> None:
         total_target = sum(float(goal["target_amount"] or 0) for goal in goals)
         total_current = sum(float(goal["current_amount"] or 0) for goal in goals)
 
-        cols = st.columns(3)
-        cols[0].metric("Goals", len(goals))
-        cols[1].metric("Tracked", f"${total_current:,.2f}")
-        cols[2].metric("Targeted", f"${total_target:,.2f}")
+        progress_metrics = st.columns(2)
+        progress_metrics[0].metric("Goals", len(goals))
+        progress_metrics[1].metric("Tracked", f"${total_current:,.2f}")
+        st.metric("Targeted", f"${total_target:,.2f}")
 
         st.divider()
         st.subheader("Create Goal")

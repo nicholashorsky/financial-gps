@@ -55,7 +55,10 @@ def render() -> None:
                     cpp_preview = adjust_cpp_for_start_age(previews["cpp_65"].monthly_amount, cpp_age)
                     cpp_source = "calculated"
                     st.caption("Source: Financial GPS planning estimate based on 70% of maximum CPP")
-                st.metric(f"Estimated CPP at age {cpp_age}", f"${cpp_preview.monthly_amount:,.2f}/month")
+                st.metric(
+                    f"Estimated CPP at age {cpp_age}",
+                    f"${cpp_preview.monthly_amount:,.0f}/mo",
+                )
                 st.caption("Your start age is modeled separately from the age-65 amount you enter.")
             with right:
                 oas_age = st.slider("OAS start age", min_value=65, max_value=70, value=int(benefits.get("OAS", {}).get("elected_start_age") or 65))

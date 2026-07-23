@@ -6,13 +6,30 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from budget.importer import get_spending_summary
-from pages.spending import _overview_period_range, _period_overview
+from pages.spending import _overview_period_range, _period_overview, _render_category_chart
 from shared.db import get_connection, init_db
 
 
 class SpendingSummaryTests(unittest.TestCase):
+    def test_category_chart_keeps_labels_off_donut_slices(self) -> None:
+        summary = SimpleNamespace(
+            spending_by_category=[
+                {"category": "Groceries", "total": 80.0},
+                {"category": "Dining", "total": 40.0},
+            ]
+        )
+
+        with patch("pages.spending.st.plotly_chart") as plotly_chart:
+            _render_category_chart(summary)
+
+        figure = plotly_chart.call_args.args[0]
+        self.assertEqual(figure.data[0].textinfo, "none")
+        self.assertIn("%{label}", figure.data[0].hovertemplate)
+
     def test_last_thirty_days_has_equal_previous_comparison_period(self) -> None:
         self.assertEqual(
             _overview_period_range("Last 30 days", date(2026, 7, 20)),
