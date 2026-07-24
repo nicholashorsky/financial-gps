@@ -16,7 +16,8 @@ The implemented Plans workspace currently provides:
 * Guided inputs for profile, income timing, CPP/OAS elections, categorized expenses, account balances, expected returns, retirement year, spending target, inflation, and projection horizon.
 * Optional mean or median expense suggestions from categorized transaction history.
 * Deterministic Canadian projections with federal and Ontario tax, CPP, OAS, GIS, OAS recovery, RRSP-to-RRIF conversion, minimum withdrawals, and tax-aware decumulation.
-* Chart views for net worth, total income, spending, tax, and annual surplus.
+* Chart views for net worth, change in net worth, stacked account balances, total income, government benefits, spending, taxes, effective tax rate, withdrawals, annual surplus, and savings rate.
+* Full-plan, 10-year, 20-year, and through-retirement views with year or age axes.
 * Annual cash-flow and tax/benefit tables.
 * Comparison of up to three independent plans.
 

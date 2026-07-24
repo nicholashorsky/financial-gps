@@ -29,23 +29,33 @@ from shared.theme import PRIMARY, PRIMARY_LIGHT, style_figure
 from shared.ui import page_header
 
 
+ACCOUNT_COLORS = {
+    "tfsa": "#6757E5",
+    "rrsp": "#2D8A53",
+    "rrif": "#25736B",
+    "taxable": "#D58B2B",
+    "fhsa": "#AA9CF5",
+    "hisa": "#4B8EC9",
+}
+
+
 def _money(value: float) -> str:
     return f"${value:,.0f}"
 
 
 def _projection_frame(plan: dict) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
+    rows = []
+    for year in project_plan(plan["payload"]):
+        benefits = year.cpp_received + year.oas_received + year.gis_received
+        total_income = year.employment_income + benefits
+        total_tax = year.federal_tax + year.provincial_tax + year.oas_recovery_tax
+        rows.append(
             {
                 "Year": year.year,
                 "Age": year.age,
                 "Employment": year.employment_income,
-                "Total income": (
-                    year.employment_income
-                    + year.cpp_received
-                    + year.oas_received
-                    + year.gis_received
-                ),
+                "Total income": total_income,
+                "Benefits": benefits,
                 "CPP": year.cpp_received,
                 "OAS": year.oas_received,
                 "GIS": year.gis_received,
@@ -53,17 +63,33 @@ def _projection_frame(plan: dict) -> pd.DataFrame:
                 "Federal tax": year.federal_tax,
                 "Provincial tax": year.provincial_tax,
                 "OAS recovery": year.oas_recovery_tax,
+                "Total tax": total_tax,
+                "Effective tax rate": total_tax / year.taxable_income if year.taxable_income > 0 else 0.0,
                 "Withdrawals": sum(year.withdrawals.values()),
                 "RRIF minimum": year.rrif_minimum_withdrawal,
                 "Spending": year.total_spending,
                 "Surplus": year.net_surplus,
+                "Savings rate": year.net_surplus / total_income if total_income > 0 else 0.0,
                 "Net worth": year.net_worth,
+                "Account balances": year.account_balances,
                 "Tax parameters": year.parameter_year,
                 "Fallback": year.uses_parameter_fallback,
             }
-            for year in project_plan(plan["payload"])
-        ]
-    )
+        )
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame["Change in net worth"] = frame["Net worth"].diff().fillna(0.0)
+    return frame
+
+
+def _projection_range(frame: pd.DataFrame, selection: str, target_year: int) -> pd.DataFrame:
+    if selection == "Next 10 years":
+        return frame.head(10)
+    if selection == "Next 20 years":
+        return frame.head(20)
+    if selection == "Through retirement":
+        return frame[frame["Year"] <= target_year]
+    return frame
 
 
 def _render_plan_cards(conn, user_id: int, plans: list[dict]) -> None:
@@ -119,17 +145,15 @@ def _render_income_inputs(conn, user_id: int, plan: dict) -> None:
             growth = st.number_input("Annual growth %", min_value=-20.0, max_value=30.0, value=3.0)
             starts_later = st.checkbox("This income starts in a future year")
             start_year = st.number_input(
-                "Future start year",
+                "Future start year (used when checked)",
                 min_value=date.today().year,
                 value=date.today().year + 1,
-                disabled=not starts_later,
             )
             has_end = st.checkbox("This income has an end year")
             end_year = st.number_input(
-                "End year",
+                "End year (used when checked)",
                 min_value=date.today().year,
                 value=date.today().year + 10,
-                disabled=not has_end,
             )
             if st.form_submit_button("Add income", type="primary"):
                 resolved_start = int(start_year) if starts_later else None
@@ -177,20 +201,18 @@ def _render_income_inputs(conn, user_id: int, plan: dict) -> None:
                     value=bool(saved_start and int(saved_start) > date.today().year),
                 )
                 start = st.number_input(
-                    "Future start year",
+                    "Future start year (used when checked)",
                     min_value=date.today().year,
                     value=max(int(saved_start or date.today().year + 1), date.today().year),
-                    disabled=not starts_later,
                 )
                 has_end = st.checkbox(
                     "This income has an end year",
                     value=saved_end is not None,
                 )
                 end = st.number_input(
-                    "End year",
+                    "End year (used when checked)",
                     min_value=date.today().year,
                     value=max(int(saved_end or date.today().year + 10), date.today().year),
-                    disabled=not has_end,
                 )
                 save_col, delete_col = st.columns(2)
                 save = save_col.form_submit_button("Save income", type="primary")
@@ -601,21 +623,36 @@ def _render_projection(plan: dict, frame: pd.DataFrame) -> None:
     target_row = frame.iloc[(frame["Year"] - target_year).abs().argsort()[:1]]
     metric_options = {
         "Net Worth": "Net worth",
+        "Change in Net Worth": "Change in net worth",
+        "Account Balances": "Account balances",
         "Total Income": "Total income",
+        "Government Benefits": "Benefits",
         "Spending": "Spending",
-        "Taxes": "Federal tax",
+        "Total Taxes": "Total tax",
+        "Effective Tax Rate": "Effective tax rate",
+        "Withdrawals": "Withdrawals",
         "Annual Surplus": "Surplus",
+        "Savings Rate": "Savings rate",
     }
-    control_left, control_middle, control_right = st.columns([2, 1, 1])
+    control_left, control_middle, control_right = st.columns([1.5, 1, 1])
     selected_metric = control_left.selectbox(
         "Chart metric",
         list(metric_options),
-        label_visibility="collapsed",
         key=f"plan_metric_{plan['id']}",
     )
-    control_middle.caption(f"Target retirement · {target_year}")
-    control_right.caption(f"{len(frame)} year view")
+    range_selection = control_middle.selectbox(
+        "Time range",
+        ["Full plan", "Next 10 years", "Next 20 years", "Through retirement"],
+        key=f"plan_range_{plan['id']}",
+    )
+    horizontal_axis = control_right.radio(
+        "Horizontal axis",
+        ["Year", "Age"],
+        horizontal=True,
+        key=f"plan_axis_{plan['id']}",
+    )
     metric_column = metric_options[selected_metric]
+    display_frame = _projection_range(frame, range_selection, target_year)
     invalid_income = [
         row
         for row in plan["payload"]["income"]
@@ -632,31 +669,80 @@ def _render_projection(plan: dict, frame: pd.DataFrame) -> None:
     metrics[1].metric("At target year", _money(float(target_row.iloc[0]["Net worth"])))
     metrics[2].metric("Ending net worth", _money(float(frame.iloc[-1]["Net worth"])))
     chart = go.Figure()
-    chart.add_trace(
-        go.Scatter(
-            x=frame["Year"],
-            y=frame[metric_column],
-            mode="lines",
-            name=selected_metric,
-            line_color=PRIMARY,
-            customdata=frame[["Age"]],
-            hovertemplate=(
-                "Year %{x}<br>Age %{customdata[0]}<br>"
-                + selected_metric
-                + " $%{y:,.0f}<extra></extra>"
-            ),
+    x_values = display_frame[horizontal_axis]
+    if selected_metric == "Account Balances":
+        account_types = sorted(
+            {
+                account_type
+                for balances in display_frame["Account balances"]
+                for account_type in balances
+            }
         )
+        for account_type in account_types:
+            chart.add_trace(
+                go.Scatter(
+                    x=x_values,
+                    y=[
+                        balances.get(account_type, 0.0)
+                        for balances in display_frame["Account balances"]
+                    ],
+                    mode="lines",
+                    name=account_type.upper(),
+                    stackgroup="accounts",
+                    line_color=ACCOUNT_COLORS.get(account_type.lower()),
+                    customdata=display_frame[["Year", "Age"]],
+                    hovertemplate=(
+                        "Year %{customdata[0]} · Age %{customdata[1]}<br>"
+                        + account_type.upper()
+                        + " $%{y:,.0f}<extra></extra>"
+                    ),
+                )
+            )
+    else:
+        is_percentage = selected_metric in {"Effective Tax Rate", "Savings Rate"}
+        value_template = "%{y:.1%}" if is_percentage else "$%{y:,.0f}"
+        chart.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=display_frame[metric_column],
+                mode="lines",
+                name=selected_metric,
+                line_color=PRIMARY,
+                fill="tozeroy" if selected_metric == "Net Worth" else None,
+                customdata=display_frame[["Year", "Age"]],
+                hovertemplate=(
+                    "Year %{customdata[0]} · Age %{customdata[1]}<br>"
+                    + selected_metric
+                    + " "
+                    + value_template
+                    + "<extra></extra>"
+                ),
+            )
+        )
+    target_axis_value = (
+        int(target_row.iloc[0]["Age"]) if horizontal_axis == "Age" else target_year
     )
-    chart.add_vline(x=target_year, line_dash="dot", line_color=PRIMARY_LIGHT)
+    if target_axis_value in set(x_values):
+        chart.add_vline(
+            x=target_axis_value,
+            line_dash="dot",
+            line_color=PRIMARY_LIGHT,
+            annotation_text="Retirement",
+            annotation_position="top",
+        )
     style_figure(chart, height=430)
     chart.update_layout(
         yaxis_title=selected_metric,
         hovermode="x unified",
-        showlegend=False,
+        showlegend=selected_metric == "Account Balances",
+        legend_orientation="h",
+        legend_y=-0.18,
     )
+    if selected_metric in {"Effective Tax Rate", "Savings Rate"}:
+        chart.update_yaxes(tickformat=".0%")
     st.plotly_chart(chart, use_container_width=True)
     st.caption(
-        f"Deterministic {len(frame)}-year projection · "
+        f"Deterministic {len(display_frame)}-year view · "
         f"{float(plan['payload']['assumptions']['spending_inflation']):.1%} spending inflation"
     )
 

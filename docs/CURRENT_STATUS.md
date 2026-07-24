@@ -31,6 +31,7 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Completed the narrow-viewport audit with compact mobile typography, spacing, metrics, and spending-chart presentation.
 * Added a clean-room, ProjectionLab-inspired Plans workspace with independent versioned plans, guided setup, deterministic projections, cash-flow and tax views, and three-plan comparison.
 * Replaced spreadsheet-like plan inputs with add/edit cards, added account balances and returns, mean/median expense suggestions, visible plan deletion, and profile-prefilled blank plans.
+* Expanded plan charts with stacked account balances, income, benefits, spending, taxes, withdrawals, surplus, savings-rate metrics, selectable time ranges, and year/age axes.
 
 ## Current focus
 

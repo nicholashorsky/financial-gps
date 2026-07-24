@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from pages.plans import _projection_frame, _projection_range
 from shared.db import get_connection, init_db
 from shared.fire_service import save_fire_profile, upsert_fire_income_source
 from shared.planning_service import (
@@ -93,6 +94,16 @@ class PlanningServiceTests(unittest.TestCase):
 
         self.assertEqual(len(projection), 40)
         self.assertGreater(projection[0].net_worth, 0)
+
+        frame = _projection_frame({"payload": payload})
+        self.assertIn("Account balances", frame.columns)
+        self.assertIn("Effective tax rate", frame.columns)
+        self.assertIn("Savings rate", frame.columns)
+        self.assertIn("Change in net worth", frame.columns)
+        self.assertEqual(len(_projection_range(frame, "Next 10 years", 2040)), 10)
+        self.assertTrue(
+            (_projection_range(frame, "Through retirement", 2040)["Year"] <= 2040).all()
+        )
 
     def test_plan_lifecycle_preserves_revisions_and_selects_replacement(self) -> None:
         base = create_plan(self.conn, self.user_id, "Base", from_current_finances=False)
