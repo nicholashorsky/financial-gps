@@ -18,6 +18,7 @@ from pages import (
     goals,
     home,
     onboarding,
+    plans,
     scenarios,
     settings,
     spending,
@@ -39,23 +40,20 @@ init_db()
 NAV_ITEMS: dict[str, tuple[str, str]] = {
     "Home": ("🏠", "home"),
     "Spending": ("💸", "spending"),
-    "Forecast": ("📈", "forecast"),
-    "Scenarios": ("🔀", "scenarios"),
     "Goals": ("🎯", "goals"),
 }
 
-FIRE_NAV_ITEMS: dict[str, tuple[str, str]] = {
-    "Financial Profile": ("👤", "fire_profile"),
-    "Account Room Tracker": ("🏦", "fire_room_tracker"),
-    "Benefits Workspace": ("📋", "fire_benefits"),
-    "FIRE Goal Setup": ("🎯", "fire_goal_setup"),
-    "FIRE Forecast": ("📊", "fire_forecast"),
-    "FIRE Scenarios": ("🔀", "fire_scenarios"),
+PLANNING_NAV_ITEMS: dict[str, tuple[str, str]] = {
+    "Plans": ("🧭", "plans"),
+}
+
+UTILITY_NAV_ITEMS: dict[str, tuple[str, str]] = {
     "Data Quality": ("⚠️", "data_quality"),
 }
 
 PAGE_RENDERERS = {
     "Onboarding": onboarding.render,
+    "Plans": plans.render,
     "Home": home.render,
     "Spending": spending.render,
     "Forecast": forecast.render,
@@ -97,13 +95,17 @@ def _render_sidebar() -> None:
                 st.session_state.page = label
 
         st.divider()
-        st.markdown("**🔥 FIRE Planner**")
+        st.markdown("**Planning**")
 
-        for label, (icon, _) in FIRE_NAV_ITEMS.items():
-            if st.button(f"{icon}  {label}", key=f"nav_fire_{label}", use_container_width=True):
+        for label, (icon, _) in PLANNING_NAV_ITEMS.items():
+            if st.button(f"{icon}  {label}", key=f"nav_planning_{label}", use_container_width=True):
                 st.session_state.page = label
 
         st.divider()
+        for label, (icon, _) in UTILITY_NAV_ITEMS.items():
+            if st.button(f"{icon}  {label}", key=f"nav_utility_{label}", use_container_width=True):
+                st.session_state.page = label
+
         if st.button("⚙️  Settings", key="nav_settings", use_container_width=True):
             st.session_state.page = "Settings"
 
@@ -138,6 +140,20 @@ def main() -> None:
     _render_sidebar()
 
     page = st.session_state.page
+    legacy_planning_pages = {
+        "Forecast",
+        "Scenarios",
+        "Financial Profile",
+        "Account Room Tracker",
+        "Benefits Workspace",
+        "FIRE Goal Setup",
+        "FIRE Forecast",
+        "FIRE Scenarios",
+    }
+    if page in legacy_planning_pages:
+        st.session_state.page = "Plans"
+        page = "Plans"
+        st.info("Forecasting tools now live in Plans. Your existing planning data is still available.")
     renderer = PAGE_RENDERERS.get(page, home.render)
     renderer()
 

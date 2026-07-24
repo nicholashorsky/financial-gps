@@ -3,7 +3,6 @@
 import os
 import tempfile
 import unittest
-from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,15 +95,8 @@ class StreamlitAppSmokeTests(unittest.TestCase):
         pages = {
             "🏠  Home": "Home",
             "💸  Spending": "Spending",
-            "📈  Forecast": "Forecast",
-            "🔀  Scenarios": "Scenarios",
             "🎯  Goals": "Goals",
-            "👤  Financial Profile": "Financial Profile",
-            "🏦  Account Room Tracker": "Account Room Tracker",
-            "📋  Benefits Workspace": "Benefits Workspace",
-            "🎯  FIRE Goal Setup": "FIRE Goal Setup",
-            "📊  FIRE Forecast": "FIRE Forecast",
-            "🔀  FIRE Scenarios": "FIRE Scenarios",
+            "🧭  Plans": "Plans",
             "⚠️  Data Quality": "Data Quality",
             "⚙️  Settings": "Settings",
         }
@@ -115,61 +107,10 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                 self.assertEqual(app.session_state["page"], expected_page)
                 self.assert_no_streamlit_exception(app)
 
-                if expected_page == "Financial Profile":
-                    province = next(field for field in app.selectbox if field.label == "Province of residence")
-                    birth_date = next(field for field in app.date_input if field.label == "Complete date of birth")
-                    gross_income = next(
-                        field for field in app.number_input if field.label == "Annual gross employment income"
-                    )
-                    province.select("ON")
-                    birth_date.set_value(date(1988, 6, 15))
-                    gross_income.set_value(85000.0)
-                    app = self.click_button(app, "Save profile")
+                if expected_page == "Plans":
+                    app = self.click_button(app, "Create plan")
                     self.assert_no_streamlit_exception(app)
-
-                    with db_module.get_connection() as connection:
-                        saved_profile = connection.execute(
-                            "SELECT province, date_of_birth FROM fire_profiles WHERE user_id = ?",
-                            (int(app.session_state["user"]["id"]),),
-                        ).fetchone()
-                    self.assertEqual(saved_profile["province"], "ON")
-                    self.assertEqual(saved_profile["date_of_birth"], "1988-06-15")
-                elif expected_page == "Benefits Workspace":
-                    cpp_estimate = next(
-                        field
-                        for field in app.number_input
-                        if field.label == "Service Canada monthly CPP estimate at age 65"
-                    )
-                    cpp_estimate.set_value(1000.0)
-                    app = self.click_button(app, "Save benefit elections")
-                    self.assert_no_streamlit_exception(app)
-
-                    with db_module.get_connection() as connection:
-                        saved_cpp = connection.execute(
-                            """
-                            SELECT cpp_estimate_at_65, estimated_monthly_amount, source
-                            FROM fire_benefit_enrollments
-                            WHERE user_id = ? AND benefit_type = 'CPP'
-                            """,
-                            (int(app.session_state["user"]["id"]),),
-                        ).fetchone()
-                    self.assertEqual(saved_cpp["cpp_estimate_at_65"], 1000.0)
-                    self.assertEqual(saved_cpp["estimated_monthly_amount"], 1000.0)
-                    self.assertEqual(saved_cpp["source"], "manual")
-                elif expected_page == "FIRE Goal Setup":
-                    variant = next(
-                        field for field in app.selectbox if field.label == "FIRE variant"
-                    )
-                    variant.select("fat")
-                    app = self.click_button(app, "Save FIRE goal")
-                    self.assert_no_streamlit_exception(app)
-
-                    with db_module.get_connection() as connection:
-                        saved_goal = connection.execute(
-                            "SELECT fire_variant FROM fire_profiles WHERE user_id = ?",
-                            (int(app.session_state["user"]["id"]),),
-                        ).fetchone()
-                    self.assertEqual(saved_goal["fire_variant"], "fat")
+                    self.assertTrue(any(tab.label == "Projection" for tab in app.tabs))
                 elif expected_page == "Settings":
                     self.assertEqual(
                         [tab.label for tab in app.tabs],

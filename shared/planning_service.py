@@ -202,6 +202,23 @@ def set_active_plan(conn: sqlite3.Connection, user_id: int, plan_id: str) -> Non
     conn.commit()
 
 
+def rename_plan(conn: sqlite3.Connection, user_id: int, plan_id: str, name: str) -> None:
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError("Plan name is required.")
+    cursor = conn.execute(
+        """
+        UPDATE planning_plans
+        SET name = ?, updated_at = ?
+        WHERE id = ? AND user_id = ? AND status = 'active'
+        """,
+        (cleaned, utc_now_iso(), plan_id, user_id),
+    )
+    if cursor.rowcount == 0:
+        raise ValueError("Plan not found.")
+    conn.commit()
+
+
 def duplicate_plan(conn: sqlite3.Connection, user_id: int, plan_id: str, name: str | None = None) -> dict:
     source = get_plan(conn, user_id, plan_id)
     duplicate = create_plan(conn, user_id, name or f"{source['name']} copy", from_current_finances=False)
