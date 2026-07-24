@@ -9,13 +9,16 @@ from pathlib import Path
 from shared.db import get_connection, init_db
 from shared.fire_service import save_fire_profile, upsert_fire_income_source
 from shared.planning_service import (
+    archive_plan,
     create_plan,
     duplicate_plan,
     get_plan,
     list_plans,
     project_plan,
     refresh_plan_sections,
+    rename_plan,
     save_plan_revision,
+    set_active_plan,
 )
 
 
@@ -88,6 +91,47 @@ class PlanningServiceTests(unittest.TestCase):
 
         self.assertEqual(len(projection), 40)
         self.assertGreater(projection[0].net_worth, 0)
+
+    def test_plan_lifecycle_preserves_revisions_and_selects_replacement(self) -> None:
+        base = create_plan(self.conn, self.user_id, "Base", from_current_finances=False)
+        alternative = duplicate_plan(self.conn, self.user_id, base["id"], "Alternative")
+        rename_plan(self.conn, self.user_id, alternative["id"], "Retire Earlier")
+        set_active_plan(self.conn, self.user_id, alternative["id"])
+
+        archive_plan(self.conn, self.user_id, alternative["id"])
+
+        visible = list_plans(self.conn, self.user_id)
+        self.assertEqual([plan["name"] for plan in visible], ["Base"])
+        self.assertEqual(visible[0]["is_active"], 1)
+        archived = get_plan(self.conn, self.user_id, alternative["id"])
+        self.assertEqual(archived["status"], "archived")
+        revision_count = self.conn.execute(
+            "SELECT COUNT(*) FROM planning_plan_revisions WHERE plan_id = ?",
+            (alternative["id"],),
+        ).fetchone()[0]
+        self.assertEqual(revision_count, 2)
+
+    def test_schema_upgrade_adds_plan_tables_without_changing_legacy_rows(self) -> None:
+        legacy_user_id = self._user("legacy@test.local")
+        self.conn.execute("DROP TABLE planning_plan_revisions")
+        self.conn.execute("DROP TABLE planning_plans")
+        self.conn.commit()
+
+        init_db(self.conn)
+
+        saved = self.conn.execute(
+            "SELECT email FROM users WHERE id = ?",
+            (legacy_user_id,),
+        ).fetchone()
+        self.assertEqual(saved["email"], "legacy@test.local")
+        table_names = {
+            row["name"]
+            for row in self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        self.assertIn("planning_plans", table_names)
+        self.assertIn("planning_plan_revisions", table_names)
 
 
 if __name__ == "__main__":

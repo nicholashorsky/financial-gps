@@ -108,7 +108,8 @@ Suggested beta smoke path:
 2. Open Spending
 3. Upload `csv samples/RBC SAMPLE CSV.csv`
 4. Import transactions
-5. Check Home, Spending, Forecast, Goals, FIRE Profile, FIRE Forecast, and Data Quality
+5. Check Home, Spending, Goals, Plans, and Data Quality
+6. In Plans, create a current-finance snapshot and review Projection, Setup, Cash Flow, and Tax & Benefits
 
 Import one persona per fresh test account so histories remain isolated and results are easier to compare.
 
@@ -138,9 +139,9 @@ Import one persona per fresh test account so histories remain isolated and resul
 - Sidebar navigation skeleton
 - CRA 2026 parameters + loader
 
-**Current:** Phase 8 — Final beta usability work and invited synthetic-data testing
+**Current:** Invited synthetic-data beta and post-beta planning-workspace review
 
-The deployed fresh-account smoke path has passed. One beta-targeted usability issue remains before the invited synthetic-data beta is considered feature-complete; current details are maintained in [Current status](docs/CURRENT_STATUS.md).
+The deployed fresh-account smoke path and beta-exit backlog are complete. A new versioned Plans workspace is under manual review; current details are maintained in [Current status](docs/CURRENT_STATUS.md).
 
 Project documentation:
 

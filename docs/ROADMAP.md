@@ -74,7 +74,10 @@ Connect present-day money activity to richer goals and life scenarios.
 * Transaction-linked goals and designated money buckets.
 * Reimbursement, rebate, and shared-expense handling.
 * Compound scenarios with category-driven inputs.
-* A clearer relationship between basic and FIRE forecasts and scenarios.
+* A versioned Plans workspace that replaces duplicate basic and FIRE forecast navigation.
+* Independent current-finance snapshots, guided setup, deterministic projection, cash-flow and tax views, and plan comparison.
+
+The first Plans workspace is implemented and awaiting manual review. Dated plan events, real assets, debts, ordered contribution flows, and chance-of-success simulation remain later work.
 
 ## Later possibilities
 

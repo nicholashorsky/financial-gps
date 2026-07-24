@@ -13,7 +13,8 @@ Provide the private Streamlit deployment link separately and grant the tester ac
 1. Register and confirm the development-login shortcut is absent.
 2. Import one persona from [`csv samples`](../csv%20samples/README.md) into a fresh account.
 3. Do not combine personas unless the test specifically requires it.
-4. Exercise onboarding, spending review, forecasts, goals, FIRE pages, Data Quality, and Settings.
+4. Exercise onboarding, spending review, goals, Plans, Data Quality, and Settings.
+5. Create a plan from current finances, review its setup and projection, then duplicate it to compare an alternative.
 5. Refresh and sign back in to verify normal-session persistence.
 
 ## Feedback and support

@@ -29,6 +29,7 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Added neutral Lean, Coast, Barista, and Fat FIRE guidance while preserving existing saved selections.
 * Reorganized Settings into horizontal Profile, Assumptions, Rules, Categories, and Account & data tabs with persistent confirmations.
 * Completed the narrow-viewport audit with compact mobile typography, spacing, metrics, and spending-chart presentation.
+* Added a clean-room, ProjectionLab-inspired Plans workspace with independent versioned plans, guided setup, deterministic projections, cash-flow and tax views, and three-plan comparison.
 
 ## Current focus
 
@@ -38,6 +39,7 @@ The beta-exit backlog is complete. The immediate focus is operating a controlled
 2. Gather structured tester feedback through GitHub Issues.
 3. Refine mobile presentation later where testing identifies meaningful usability problems.
 4. Prepare the PostgreSQL, migration, backup, and isolation work required before real-data testing.
+5. Complete manual review of the new Plans workflow before resolving Issue #8.
 
 ## Release readiness
 
@@ -52,8 +54,8 @@ The deployed fresh-account path, synthetic-data storage boundary, and narrow-vie
 
 Current automated and deployment validation:
 
-* 92 automated tests pass.
-* 25 Streamlit navigation subtests pass.
+* 97 automated tests pass.
+* 18 Streamlit navigation subtests pass.
 * Ruff reports no issues.
 * The original sample import creates 118 transactions across four accounts in an isolated smoke test.
 * Eight additional synthetic personas parse to their documented 1,463 total transactions with no invalid rows or parser warnings.
