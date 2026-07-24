@@ -281,11 +281,36 @@ CREATE TABLE IF NOT EXISTS forecast_assumptions (
     gis_couple_threshold            REAL
 );
 
+CREATE TABLE IF NOT EXISTS planning_plans (
+    id              TEXT PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'active',
+    is_active       BOOLEAN NOT NULL DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS planning_plan_revisions (
+    id              TEXT PRIMARY KEY,
+    plan_id         TEXT NOT NULL REFERENCES planning_plans(id) ON DELETE CASCADE,
+    revision_number INTEGER NOT NULL,
+    payload         TEXT NOT NULL,
+    reason          TEXT NOT NULL DEFAULT 'edit',
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(plan_id, revision_number)
+);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_scenarios_user ON scenarios(user_id);
+CREATE INDEX IF NOT EXISTS idx_planning_plans_user ON planning_plans(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_planning_revisions_plan ON planning_plan_revisions(plan_id, revision_number);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_planning_active_plan
+ON planning_plans(user_id)
+WHERE is_active = 1 AND status = 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_import_hash ON transactions(import_hash);
 """
 
