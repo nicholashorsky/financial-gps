@@ -69,7 +69,7 @@ The audits inform—but do not change—the following GitHub issues:
 | Issue | Audit-derived guidance |
 |---|---|
 | [#6 — Transaction-linked goals and money buckets](https://github.com/nicholashorsky/financial-gps/issues/6) | Separate historical balances, present-day allocations, and projected contributions. Treat bucket funding as allocation or transfer rather than new income. |
-| [#8 — Forecast and scenario information architecture](https://github.com/nicholashorsky/financial-gps/issues/8) | Prefer a progressive current-finances → forecast → FIRE plan → scenarios → comparison journey. |
+| [#8 — Forecast and scenario information architecture](https://github.com/nicholashorsky/financial-gps/issues/8) | A versioned Plans workspace now implements the progressive current-finances → plan → projection → comparison journey and is awaiting manual review. |
 | [#9 — Reconciliation and unmatched transfers](https://github.com/nicholashorsky/financial-gps/issues/9) | Use linked transfer pairs, cleared and reconciliation state, imported identifiers, and placeholder or off-budget destinations. |
 | [#11 — Compound scenarios](https://github.com/nicholashorsky/financial-gps/issues/11) | Compose scenarios from independently timed income, expense, asset, debt, milestone, and flow events. |
 | [#12 — Reimbursements and designated funds](https://github.com/nicholashorsky/financial-gps/issues/12) | Preserve raw transactions, use explicit links and splits, and distinguish reporting classification from cash movement. |
@@ -83,13 +83,9 @@ No acceptance criteria or project-board state were changed as part of this synth
 
 The following are not approved architecture or active implementation work. Each requires a dedicated design and migration review before becoming a decision or GitHub issue.
 
-### Dated current-finance snapshots
+### Simulation-run metadata
 
-Create a user-reviewed, as-of-date boundary between mutable transaction history and planning inputs. A candidate snapshot would capture approved balances, income, spending baselines, debts, benefits, contribution-room values, and provenance.
-
-### Versioned plan snapshots and simulation runs
-
-Tie saved results to immutable plan inputs and record relevant engine, tax-data, market-data, settings, timestamp, and random-seed metadata. This should precede historical or Monte Carlo analysis.
+Current-finance snapshots and immutable plan revisions are implemented. Before historical or Monte Carlo analysis, saved simulation results must additionally record engine, assumptions, tax-data, market-data, timestamp, dataset, and random-seed versions.
 
 ### Exact monetary representation
 
@@ -112,11 +108,11 @@ Expand regression coverage around transfers netting to zero, splits reconciling 
 | Accepted | ProjectionLab is used only through clean-room product research. |
 | Accepted | Ignidash code is excluded unless an explicit AGPL-compatible licensing decision is made. |
 | Accepted | Canadian calculations continue to be implemented from authoritative public sources. |
-| Recommendation | Introduce current-finance and plan snapshots after dedicated design. |
+| Accepted | Plans use independent current-finance snapshots and immutable revisions; plan edits do not write back to source records. |
 | Recommendation | Evaluate exact monetary storage before accepting real financial data. |
 | Recommendation | Expand payee and deterministic-rule modeling. |
 | Recommendation | Add reproducibility metadata and broader financial invariants before probabilistic simulation. |
 
 ## Next use
 
-Issue #14 remains the final beta-exit task. After the synthetic-data beta is feature-complete, this synthesis can guide issue refinement and post-beta architecture work without broadening the current beta scope.
+The beta-exit backlog is complete. Issue #8 is the active manual-review gate for the first Plans workspace. Subsequent clean-room planning work follows [Planning Capability Status](../PLANNING_CAPABILITIES.md), beginning with timeline events and ordered cash flows.

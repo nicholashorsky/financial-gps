@@ -2,6 +2,16 @@
 
 This log records durable product and technical decisions. Open questions belong in GitHub Issues.
 
+## 2026-07-24 — Plans are independent versioned snapshots
+
+**Decision:** Forward-looking plans are user-isolated records with immutable revisions. A plan may be initialized or selectively refreshed from current finances, but plan edits never write back to transaction, profile, or other source records. Plan accounts use balances and expected returns; contribution-room tracking is not part of the plan builder.
+
+**Reasoning:** Independent snapshots make alternatives reproducible and comparable without allowing hypothetical changes to rewrite the user's current position. Balance-based accounts keep the planning workflow focused on money available to the plan.
+
+**Tradeoffs:** Current-finance changes do not automatically appear in saved plans, and users must explicitly refresh selected sections. Contribution eligibility and room remain external verification concerns rather than projection inputs.
+
+**Reconsider when:** A reviewed reconciliation model, real-data storage, or a future ordered contribution-flow design requires a stronger link between current accounts and plan accounts.
+
 ## 2026-07-22 — External projects remain research references
 
 **Decision:** Financial GPS remains the primary Python and Streamlit codebase. Actual Budget, ProjectionLab, Ignidash, and Retire, Eh? are research references rather than fork targets or runtime dependencies. ProjectionLab concepts must be implemented through clean-room work, and Ignidash code must not be incorporated without an explicit AGPL-compatible licensing decision. Canadian calculations continue to be implemented and verified from authoritative public sources.

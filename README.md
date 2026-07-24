@@ -148,6 +148,7 @@ Project documentation:
 - [Project vision](docs/PROJECT_VISION.md)
 - [Current status](docs/CURRENT_STATUS.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Planning capability status](docs/PLANNING_CAPABILITIES.md)
 - [Decision log](docs/DECISIONS.md)
 - [Beta data and storage policy](docs/BETA_DATA_POLICY.md)
 - [Synthetic beta tester guide](docs/BETA_TESTER_GUIDE.md)

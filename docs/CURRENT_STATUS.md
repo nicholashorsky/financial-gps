@@ -30,6 +30,7 @@ Produce a stable, cohesive Streamlit beta that can be tested safely by a small g
 * Reorganized Settings into horizontal Profile, Assumptions, Rules, Categories, and Account & data tabs with persistent confirmations.
 * Completed the narrow-viewport audit with compact mobile typography, spacing, metrics, and spending-chart presentation.
 * Added a clean-room, ProjectionLab-inspired Plans workspace with independent versioned plans, guided setup, deterministic projections, cash-flow and tax views, and three-plan comparison.
+* Replaced spreadsheet-like plan inputs with add/edit cards, added account balances and returns, mean/median expense suggestions, visible plan deletion, and profile-prefilled blank plans.
 
 ## Current focus
 
@@ -40,6 +41,7 @@ The beta-exit backlog is complete. The immediate focus is operating a controlled
 3. Refine mobile presentation later where testing identifies meaningful usability problems.
 4. Prepare the PostgreSQL, migration, backup, and isolation work required before real-data testing.
 5. Complete manual review of the new Plans workflow before resolving Issue #8.
+6. After approval, implement planning capabilities in the order documented in [Planning Capability Status](PLANNING_CAPABILITIES.md), beginning with timeline events rather than probability simulation.
 
 ## Release readiness
 
@@ -49,12 +51,13 @@ The deployed fresh-account path, synthetic-data storage boundary, and narrow-vie
 
 * The first external beta is synthetic-only. Managed PostgreSQL is required before accepting real financial data; see the [Beta Data and Storage Policy](BETA_DATA_POLICY.md).
 * SQLite passed normal refresh persistence but remains non-durable across restarts and redeployments; the synthetic-only restriction remains in force.
+* Couple planning and user invitations require PostgreSQL, versioned migrations, backup/recovery, and the multi-user isolation audit.
 
 ## Validation baseline
 
 Current automated and deployment validation:
 
-* 97 automated tests pass.
+* 102 automated tests pass.
 * 18 Streamlit navigation subtests pass.
 * Ruff reports no issues.
 * The original sample import creates 118 transactions across four accounts in an isolated smoke test.

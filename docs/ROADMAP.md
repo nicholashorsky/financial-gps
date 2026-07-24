@@ -4,7 +4,7 @@ The roadmap describes release-level outcomes. Detailed requirements and active w
 
 ## Phase 1 — Beta exit
 
-**Status:** Final usability issues and narrow-viewport audit remain.
+**Status:** Complete.
 
 ### Goal
 
@@ -19,7 +19,7 @@ Deliver a stable, understandable Streamlit application suitable for controlled v
 * Preserve automated financial, import, isolation, and workflow coverage.
 * Correct high-impact FIRE cash-flow and tax assumptions.
 
-The deployment smoke test, storage-boundary decision, FIRE correctness work, CPP estimate override, FIRE variant guidance, and Settings reorganization are complete. Remaining tracked beta-exit work is limited to Issue #14.
+The deployment smoke test, storage-boundary decision, FIRE correctness work, CPP estimate override, FIRE variant guidance, Settings reorganization, and narrow-viewport audit are complete.
 
 ## Phase 2 — Early tester release
 
@@ -77,12 +77,12 @@ Connect present-day money activity to richer goals and life scenarios.
 * A versioned Plans workspace that replaces duplicate basic and FIRE forecast navigation.
 * Independent current-finance snapshots, guided setup, deterministic projection, cash-flow and tax views, and plan comparison.
 
-The first Plans workspace is implemented and awaiting manual review. Dated plan events, real assets, debts, ordered contribution flows, and chance-of-success simulation remain later work.
+The first Plans workspace is implemented and awaiting manual review. The detailed capability sequence is maintained in [Planning Capability Status](PLANNING_CAPABILITIES.md): timeline events, ordered flows, debts and real assets, interactive What-If mode, reports and withdrawal strategies, and finally historical/probabilistic simulation.
 
 ## Later possibilities
 
 * Additional provincial tax models and Quebec-native support.
-* Couples, shared household finances, and pension splitting.
+* Couple plans, secure invitations to another Financial GPS user, shared household finances, and pension splitting.
 * Monte Carlo and probability-based projections.
 * Open banking and brokerage integrations.
 * Notifications and achievement systems.
