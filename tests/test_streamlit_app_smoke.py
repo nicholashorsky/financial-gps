@@ -110,7 +110,7 @@ class StreamlitAppSmokeTests(unittest.TestCase):
                 if expected_page == "Plans":
                     app = self.click_button(app, "Create plan")
                     self.assert_no_streamlit_exception(app)
-                    self.assertTrue(any(tab.label == "Projection" for tab in app.tabs))
+                    self.assertTrue(any(tab.label == "Plan" for tab in app.tabs))
                 elif expected_page == "Settings":
                     self.assertEqual(
                         [tab.label for tab in app.tabs],

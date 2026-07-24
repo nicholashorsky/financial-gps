@@ -11,6 +11,7 @@ from shared.fire_service import save_fire_profile, upsert_fire_income_source
 from shared.planning_service import (
     archive_plan,
     create_plan,
+    delete_plan,
     duplicate_plan,
     get_plan,
     list_plans,
@@ -19,6 +20,7 @@ from shared.planning_service import (
     rename_plan,
     save_plan_revision,
     set_active_plan,
+    spending_suggestions,
 )
 
 
@@ -132,6 +134,75 @@ class PlanningServiceTests(unittest.TestCase):
         }
         self.assertIn("planning_plans", table_names)
         self.assertIn("planning_plan_revisions", table_names)
+
+    def test_delete_plan_is_user_isolated_and_cascades_revisions(self) -> None:
+        plan = create_plan(self.conn, self.user_id, "Delete me", from_current_finances=False)
+
+        with self.assertRaises(ValueError):
+            delete_plan(self.conn, self.other_user_id, plan["id"])
+        delete_plan(self.conn, self.user_id, plan["id"])
+
+        self.assertEqual(list_plans(self.conn, self.user_id), [])
+        revision_count = self.conn.execute(
+            "SELECT COUNT(*) FROM planning_plan_revisions WHERE plan_id = ?",
+            (plan["id"],),
+        ).fetchone()[0]
+        self.assertEqual(revision_count, 0)
+
+    def test_blank_plan_prefills_about_you_without_copying_financial_sections(self) -> None:
+        save_fire_profile(
+            self.conn,
+            self.user_id,
+            province="ON",
+            date_of_birth="1985-06-15",
+            years_in_canada_post_18=20,
+        )
+        upsert_fire_income_source(
+            self.conn,
+            self.user_id,
+            "employment",
+            90000,
+            is_override=True,
+        )
+
+        plan = create_plan(
+            self.conn,
+            self.user_id,
+            "Blank with profile",
+            from_current_finances=False,
+        )
+
+        self.assertEqual(plan["payload"]["profile"]["province"], "ON")
+        self.assertEqual(plan["payload"]["profile"]["date_of_birth"], "1985-06-15")
+        self.assertEqual(plan["payload"]["income"], [])
+        self.assertEqual(plan["payload"]["accounts"], [])
+        self.assertEqual(plan["payload"]["spending"], [])
+
+    def test_spending_suggestions_distinguish_mean_from_median(self) -> None:
+        rows = [
+            ("2026-01-10", "Groceries", "expense", -100),
+            ("2026-02-10", "Income", "income", 1000),
+            ("2026-03-10", "Groceries", "expense", -1000),
+            ("2026-03-11", "Transfer", "transfer_out", -5000),
+        ]
+        for transaction_date, category, transaction_type, amount in rows:
+            self.conn.execute(
+                """
+                INSERT INTO transactions (
+                    user_id, date, description, amount, category, transaction_type, source
+                )
+                VALUES (?, ?, 'Synthetic row', ?, ?, ?, 'manual')
+                """,
+                (self.user_id, transaction_date, amount, category, transaction_type),
+            )
+        self.conn.commit()
+
+        suggestions = spending_suggestions(self.conn, self.user_id)
+
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["category"], "Groceries")
+        self.assertEqual(suggestions[0]["mean_monthly"], 366.67)
+        self.assertEqual(suggestions[0]["median_monthly"], 100.0)
 
 
 if __name__ == "__main__":

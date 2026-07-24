@@ -40,6 +40,8 @@ def _spending_defaults(conn: sqlite3.Connection, user_id: int) -> dict[str, floa
         WHERE user_id = ?
           AND is_excluded = 0
           AND amount < 0
+          AND COALESCE(transaction_type, 'expense') = 'expense'
+          AND COALESCE(category, 'Uncategorized') NOT IN ('Transfer', 'Income')
           AND date >= ?
         """,
         (user_id, _days_ago(90)),
@@ -86,6 +88,27 @@ def _upsert_income_default(conn: sqlite3.Connection, user_id: int, annual_amount
 
 def _upsert_spending_defaults(conn: sqlite3.Connection, user_id: int, monthly_by_category: dict[str, float]) -> int:
     updated = 0
+    categories = list(monthly_by_category)
+    if categories:
+        placeholders = ", ".join("?" for _ in categories)
+        cursor = conn.execute(
+            f"""
+            DELETE FROM fire_spending_baseline
+            WHERE user_id = ?
+              AND is_override = 0
+              AND category NOT IN ({placeholders})
+            """,
+            (user_id, *categories),
+        )
+    else:
+        cursor = conn.execute(
+            """
+            DELETE FROM fire_spending_baseline
+            WHERE user_id = ? AND is_override = 0
+            """,
+            (user_id,),
+        )
+    updated += max(cursor.rowcount, 0)
     for category, monthly_amount in monthly_by_category.items():
         row = conn.execute(
             """

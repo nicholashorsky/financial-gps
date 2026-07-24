@@ -14,6 +14,7 @@ from shared.planning_service import (
     REFRESHABLE_SECTIONS,
     archive_plan,
     create_plan,
+    delete_plan,
     duplicate_plan,
     list_plans,
     project_plan,
@@ -22,6 +23,7 @@ from shared.planning_service import (
     save_plan_revision,
     set_active_plan,
     snapshot_current_finances,
+    spending_suggestions,
 )
 from shared.theme import PRIMARY, PRIMARY_LIGHT, style_figure
 from shared.ui import page_header
@@ -31,13 +33,6 @@ def _money(value: float) -> str:
     return f"${value:,.0f}"
 
 
-def _records(frame: pd.DataFrame) -> list[dict]:
-    return [
-        {key: (None if pd.isna(value) else value) for key, value in row.items()}
-        for row in frame.to_dict(orient="records")
-    ]
-
-
 def _projection_frame(plan: dict) -> pd.DataFrame:
     return pd.DataFrame(
         [
@@ -45,6 +40,12 @@ def _projection_frame(plan: dict) -> pd.DataFrame:
                 "Year": year.year,
                 "Age": year.age,
                 "Employment": year.employment_income,
+                "Total income": (
+                    year.employment_income
+                    + year.cpp_received
+                    + year.oas_received
+                    + year.gis_received
+                ),
                 "CPP": year.cpp_received,
                 "OAS": year.oas_received,
                 "GIS": year.gis_received,
@@ -93,6 +94,8 @@ def _render_plan_cards(conn, user_id: int, plans: list[dict]) -> None:
                         use_container_width=True,
                     ):
                         set_active_plan(conn, user_id, plan["id"])
+                        st.session_state.planning_workspace_plan_id = plan["id"]
+                        st.session_state.planning_edit_mode = False
                         st.rerun()
 
 
@@ -102,6 +105,337 @@ def _save_payload(conn, user_id: int, plan: dict, payload: dict, reason: str) ->
     st.rerun()
 
 
+def _render_income_inputs(conn, user_id: int, plan: dict) -> None:
+    payload = plan["payload"]
+    st.subheader("Income")
+    st.caption("Add each source that should fund this plan.")
+    with st.popover("＋ Add income", use_container_width=True):
+        with st.form(f"add_income_{plan['id']}", clear_on_submit=True):
+            source_type = st.selectbox(
+                "Income type",
+                ["Employment", "Pension", "Side hustle", "Rental", "Other"],
+            )
+            annual_amount = st.number_input("Annual amount", min_value=0.0, step=1000.0)
+            growth = st.number_input("Annual growth %", min_value=-20.0, max_value=30.0, value=3.0)
+            starts_later = st.checkbox("This income starts in a future year")
+            start_year = st.number_input(
+                "Future start year",
+                min_value=date.today().year,
+                value=date.today().year + 1,
+                disabled=not starts_later,
+            )
+            has_end = st.checkbox("This income has an end year")
+            end_year = st.number_input(
+                "End year",
+                min_value=date.today().year,
+                value=date.today().year + 10,
+                disabled=not has_end,
+            )
+            if st.form_submit_button("Add income", type="primary"):
+                resolved_start = int(start_year) if starts_later else None
+                resolved_end = int(end_year) if has_end else None
+                if resolved_end and resolved_start and resolved_end < resolved_start:
+                    st.error("End year must be the same as or later than the start year.")
+                    return
+                updated = deepcopy(payload)
+                updated["income"].append(
+                    {
+                        "source_type": source_type.lower().replace(" ", "_"),
+                        "annual_amount": annual_amount,
+                        "income_character": "employment" if source_type == "Employment" else "other",
+                        "start_year": resolved_start,
+                        "end_year": resolved_end,
+                        "inflation_rate": growth / 100,
+                        "is_pensionable": source_type == "Employment",
+                    }
+                )
+                _save_payload(conn, user_id, plan, updated, "income_added")
+
+    if not payload["income"]:
+        st.info("No income sources yet.")
+    for index, income in enumerate(payload["income"]):
+        label = str(income.get("source_type") or "Income").replace("_", " ").title()
+        with st.expander(f"{label} · {_money(float(income.get('annual_amount') or 0))}/year"):
+            with st.form(f"edit_income_{plan['id']}_{index}"):
+                amount = st.number_input(
+                    "Annual amount",
+                    min_value=0.0,
+                    value=float(income.get("annual_amount") or 0),
+                    step=1000.0,
+                )
+                growth = st.number_input(
+                    "Annual growth %",
+                    min_value=-20.0,
+                    max_value=30.0,
+                    value=float(income.get("inflation_rate") or 0) * 100,
+                    key=f"income_growth_{plan['id']}_{index}",
+                )
+                saved_start = income.get("start_year")
+                saved_end = income.get("end_year")
+                starts_later = st.checkbox(
+                    "This income starts in a future year",
+                    value=bool(saved_start and int(saved_start) > date.today().year),
+                )
+                start = st.number_input(
+                    "Future start year",
+                    min_value=date.today().year,
+                    value=max(int(saved_start or date.today().year + 1), date.today().year),
+                    disabled=not starts_later,
+                )
+                has_end = st.checkbox(
+                    "This income has an end year",
+                    value=saved_end is not None,
+                )
+                end = st.number_input(
+                    "End year",
+                    min_value=date.today().year,
+                    value=max(int(saved_end or date.today().year + 10), date.today().year),
+                    disabled=not has_end,
+                )
+                save_col, delete_col = st.columns(2)
+                save = save_col.form_submit_button("Save income", type="primary")
+                remove = delete_col.form_submit_button("Delete income")
+                if save:
+                    resolved_start = int(start) if starts_later else None
+                    resolved_end = int(end) if has_end else None
+                    if resolved_end and resolved_start and resolved_end < resolved_start:
+                        st.error("End year must be the same as or later than the start year.")
+                        return
+                    updated = deepcopy(payload)
+                    updated["income"][index].update(
+                        {
+                            "annual_amount": amount,
+                            "inflation_rate": growth / 100,
+                            "start_year": resolved_start,
+                            "end_year": resolved_end,
+                        }
+                    )
+                    _save_payload(conn, user_id, plan, updated, "income_edited")
+                if remove:
+                    updated = deepcopy(payload)
+                    updated["income"].pop(index)
+                    _save_payload(conn, user_id, plan, updated, "income_deleted")
+
+
+def _render_spending_inputs(conn, user_id: int, plan: dict) -> None:
+    payload = plan["payload"]
+    st.subheader("Expenses")
+    st.caption("Use one card for each recurring spending category.")
+    suggestions = spending_suggestions(conn, user_id)
+    if suggestions:
+        with st.popover("Suggest from spending history", use_container_width=True):
+            st.caption(
+                f"Based on {suggestions[0]['months']} imported month(s). "
+                "Median reduces the effect of occasional large purchases."
+            )
+            method = st.radio(
+                "Suggestion method",
+                ["Median", "Mean"],
+                horizontal=True,
+                key=f"spending_method_{plan['id']}",
+            )
+            suggestion_frame = pd.DataFrame(
+                [
+                    {
+                        "Category": row["category"],
+                        "Mean": row["mean_monthly"],
+                        "Median": row["median_monthly"],
+                    }
+                    for row in suggestions
+                ]
+            )
+            st.dataframe(suggestion_frame, use_container_width=True, hide_index=True)
+            selected_categories = st.multiselect(
+                "Categories to add",
+                [row["category"] for row in suggestions],
+                default=[row["category"] for row in suggestions],
+                key=f"spending_suggestions_{plan['id']}",
+            )
+            replace_matches = st.checkbox(
+                "Override matching plan expenses",
+                value=False,
+                help="When off, existing plan expenses keep their current amounts.",
+            )
+            if st.button(
+                "Apply suggestions",
+                type="primary",
+                key=f"apply_spending_suggestions_{plan['id']}",
+            ):
+                updated = deepcopy(payload)
+                existing = {
+                    str(row.get("category") or "").casefold(): index
+                    for index, row in enumerate(updated["spending"])
+                }
+                amount_key = "median_monthly" if method == "Median" else "mean_monthly"
+                for suggestion in suggestions:
+                    category = suggestion["category"]
+                    if category not in selected_categories:
+                        continue
+                    proposed = {
+                        "category": category,
+                        "monthly_amount": suggestion[amount_key],
+                        "inflation_rate": 0.025,
+                        "is_essential": False,
+                        "flexibility_type": "discretionary",
+                        "is_override": True,
+                        "suggestion_method": method.lower(),
+                    }
+                    match = existing.get(category.casefold())
+                    if match is None:
+                        updated["spending"].append(proposed)
+                    elif replace_matches:
+                        updated["spending"][match].update(proposed)
+                _save_payload(conn, user_id, plan, updated, "spending_suggestions")
+
+    with st.popover("＋ Add expense", use_container_width=True):
+        with st.form(f"add_expense_{plan['id']}", clear_on_submit=True):
+            category = st.text_input("Expense name")
+            monthly = st.number_input("Monthly amount", min_value=0.0, step=50.0)
+            flexibility = st.selectbox(
+                "Flexibility",
+                ["Essential", "Discretionary", "Hybrid", "Not spending"],
+            )
+            inflation = st.number_input("Annual inflation %", min_value=0.0, max_value=20.0, value=2.5)
+            if st.form_submit_button("Add expense", type="primary"):
+                if not category.strip():
+                    st.error("Expense name is required.")
+                else:
+                    updated = deepcopy(payload)
+                    updated["spending"].append(
+                        {
+                            "category": category.strip(),
+                            "monthly_amount": monthly,
+                            "inflation_rate": inflation / 100,
+                            "is_essential": flexibility == "Essential",
+                            "flexibility_type": flexibility.lower().replace(" ", "_"),
+                            "is_override": True,
+                        }
+                    )
+                    _save_payload(conn, user_id, plan, updated, "expense_added")
+
+    if not payload["spending"]:
+        st.info("No expenses yet.")
+    for index, expense in enumerate(payload["spending"]):
+        name = expense.get("category") or "Expense"
+        with st.expander(f"{name} · {_money(float(expense.get('monthly_amount') or 0))}/month"):
+            with st.form(f"edit_expense_{plan['id']}_{index}"):
+                edited_name = st.text_input("Expense name", value=name)
+                monthly = st.number_input(
+                    "Monthly amount",
+                    min_value=0.0,
+                    value=float(expense.get("monthly_amount") or 0),
+                    step=50.0,
+                )
+                flexibility_options = ["Essential", "Discretionary", "Hybrid", "Not spending"]
+                saved_flexibility = str(
+                    expense.get("flexibility_type")
+                    or ("essential" if expense.get("is_essential") else "discretionary")
+                ).replace("_", " ").title()
+                flexibility = st.selectbox(
+                    "Flexibility",
+                    flexibility_options,
+                    index=(
+                        flexibility_options.index(saved_flexibility)
+                        if saved_flexibility in flexibility_options
+                        else 0
+                    ),
+                )
+                save_col, delete_col = st.columns(2)
+                save = save_col.form_submit_button("Save expense", type="primary")
+                remove = delete_col.form_submit_button("Delete expense")
+                if save:
+                    updated = deepcopy(payload)
+                    updated["spending"][index].update(
+                        {
+                            "category": edited_name.strip() or name,
+                            "monthly_amount": monthly,
+                            "is_essential": flexibility == "Essential",
+                            "flexibility_type": flexibility.lower().replace(" ", "_"),
+                            "is_override": True,
+                        }
+                    )
+                    _save_payload(conn, user_id, plan, updated, "expense_edited")
+                if remove:
+                    updated = deepcopy(payload)
+                    updated["spending"].pop(index)
+                    _save_payload(conn, user_id, plan, updated, "expense_deleted")
+
+
+def _render_account_inputs(conn, user_id: int, plan: dict) -> None:
+    payload = plan["payload"]
+    account_types = ["TFSA", "RRSP", "FHSA", "Taxable", "HISA", "RRIF"]
+    st.subheader("Accounts")
+    st.caption("Enter the balance available to this plan. Contribution-room tracking is not required.")
+    with st.popover("＋ Add account", use_container_width=True):
+        with st.form(f"add_account_{plan['id']}", clear_on_submit=True):
+            account_type = st.selectbox("Account type", account_types)
+            institution = st.text_input("Institution or nickname")
+            balance = st.number_input("Current balance", min_value=0.0, step=1000.0)
+            annual_return = st.number_input(
+                "Expected annual return %",
+                min_value=-20.0,
+                max_value=30.0,
+                value=5.0,
+            )
+            if st.form_submit_button("Add account", type="primary"):
+                updated = deepcopy(payload)
+                updated["accounts"].append(
+                    {
+                        "account_type": account_type,
+                        "current_balance": balance,
+                        "institution": institution.strip() or None,
+                        "annual_return": annual_return / 100,
+                    }
+                )
+                _save_payload(conn, user_id, plan, updated, "account_added")
+
+    if not payload["accounts"]:
+        st.info("No accounts yet.")
+    for index, account in enumerate(payload["accounts"]):
+        account_type = str(account.get("account_type") or "Account").upper()
+        balance = float(account.get("current_balance") or 0)
+        institution = account.get("institution") or "No institution"
+        with st.expander(f"{account_type} · {_money(balance)} · {institution}"):
+            with st.form(f"edit_account_{plan['id']}_{index}"):
+                saved_type = account_type if account_type in account_types else "Taxable"
+                edited_type = st.selectbox(
+                    "Account type",
+                    account_types,
+                    index=account_types.index(saved_type),
+                )
+                edited_institution = st.text_input("Institution or nickname", value=institution)
+                edited_balance = st.number_input(
+                    "Current balance",
+                    min_value=0.0,
+                    value=balance,
+                    step=1000.0,
+                )
+                annual_return = st.number_input(
+                    "Expected annual return %",
+                    min_value=-20.0,
+                    max_value=30.0,
+                    value=float(account.get("annual_return") or 0.05) * 100,
+                )
+                save_col, delete_col = st.columns(2)
+                save = save_col.form_submit_button("Save account", type="primary")
+                remove = delete_col.form_submit_button("Delete account")
+                if save:
+                    updated = deepcopy(payload)
+                    updated["accounts"][index].update(
+                        {
+                            "account_type": edited_type,
+                            "current_balance": edited_balance,
+                            "institution": edited_institution.strip() or None,
+                            "annual_return": annual_return / 100,
+                        }
+                    )
+                    _save_payload(conn, user_id, plan, updated, "account_edited")
+                if remove:
+                    updated = deepcopy(payload)
+                    updated["accounts"].pop(index)
+                    _save_payload(conn, user_id, plan, updated, "account_deleted")
+
+
 def _render_setup(conn, user_id: int, plan: dict) -> None:
     payload = plan["payload"]
     tabs = st.tabs(
@@ -109,7 +443,7 @@ def _render_setup(conn, user_id: int, plan: dict) -> None:
             "1. About You",
             "2. Income & Benefits",
             "3. Spending",
-            "4. Accounts & Room",
+            "4. Accounts",
             "5. Goal & Assumptions",
             "6. Review",
         ]
@@ -156,22 +490,9 @@ def _render_setup(conn, user_id: int, plan: dict) -> None:
 
     with tabs[1]:
         st.caption("Amounts are annual unless the benefit field says monthly.")
-        income_columns = [
-            "source_type",
-            "annual_amount",
-            "income_character",
-            "start_year",
-            "end_year",
-            "inflation_rate",
-            "is_pensionable",
-        ]
-        income_frame = pd.DataFrame(payload["income"], columns=income_columns)
-        edited_income = st.data_editor(
-            income_frame,
-            num_rows="dynamic",
-            use_container_width=True,
-            key=f"income_editor_{plan['id']}_{plan['revision_number']}",
-        )
+        _render_income_inputs(conn, user_id, plan)
+        st.divider()
+        st.subheader("Government benefits")
         benefit_map = {row["benefit_type"].upper(): row for row in payload["benefits"]}
         with st.form(f"benefits_{plan['id']}"):
             left, right = st.columns(2)
@@ -186,7 +507,6 @@ def _render_setup(conn, user_id: int, plan: dict) -> None:
             oas_age = right.slider("OAS start age", 65, 70, int(oas.get("elected_start_age") or 65))
             if st.form_submit_button("Save Income & Benefits", type="primary"):
                 updated = deepcopy(payload)
-                updated["income"] = _records(edited_income)
                 updated["benefits"] = [
                     {
                         "benefit_type": "CPP",
@@ -207,43 +527,10 @@ def _render_setup(conn, user_id: int, plan: dict) -> None:
                 _save_payload(conn, user_id, plan, updated, "income_benefits")
 
     with tabs[2]:
-        spending_frame = pd.DataFrame(
-            payload["spending"],
-            columns=["category", "monthly_amount", "inflation_rate", "is_essential"],
-        )
-        edited_spending = st.data_editor(
-            spending_frame,
-            num_rows="dynamic",
-            use_container_width=True,
-            key=f"spending_editor_{plan['id']}_{plan['revision_number']}",
-        )
-        if st.button("Save Spending", type="primary", key=f"save_spending_{plan['id']}"):
-            updated = deepcopy(payload)
-            updated["spending"] = _records(edited_spending)
-            _save_payload(conn, user_id, plan, updated, "spending")
+        _render_spending_inputs(conn, user_id, plan)
 
     with tabs[3]:
-        account_frame = pd.DataFrame(
-            payload["accounts"],
-            columns=["account_type", "current_balance", "opened_date", "institution", "beneficiary_type"],
-        )
-        edited_accounts = st.data_editor(
-            account_frame,
-            num_rows="dynamic",
-            use_container_width=True,
-            key=f"account_editor_{plan['id']}_{plan['revision_number']}",
-        )
-        room = payload["room"]
-        room_rows = [
-            {"Account": "TFSA", "Available room": room.get("tfsa", {}).get("available_room", 0)},
-            {"Account": "RRSP", "Available room": room.get("rrsp", {}).get("deduction_limit", 0)},
-            {"Account": "FHSA", "Available room": room.get("fhsa", {}).get("carryforward_room", 0)},
-        ]
-        st.dataframe(pd.DataFrame(room_rows), use_container_width=True, hide_index=True)
-        if st.button("Save Accounts", type="primary", key=f"save_accounts_{plan['id']}"):
-            updated = deepcopy(payload)
-            updated["accounts"] = _records(edited_accounts)
-            _save_payload(conn, user_id, plan, updated, "accounts")
+        _render_account_inputs(conn, user_id, plan)
 
     with tabs[4]:
         profile = payload["profile"]
@@ -312,6 +599,34 @@ def _render_projection(plan: dict, frame: pd.DataFrame) -> None:
     profile = plan["payload"]["profile"]
     target_year = int(profile.get("target_retire_year") or frame.iloc[0]["Year"])
     target_row = frame.iloc[(frame["Year"] - target_year).abs().argsort()[:1]]
+    metric_options = {
+        "Net Worth": "Net worth",
+        "Total Income": "Total income",
+        "Spending": "Spending",
+        "Taxes": "Federal tax",
+        "Annual Surplus": "Surplus",
+    }
+    control_left, control_middle, control_right = st.columns([2, 1, 1])
+    selected_metric = control_left.selectbox(
+        "Chart metric",
+        list(metric_options),
+        label_visibility="collapsed",
+        key=f"plan_metric_{plan['id']}",
+    )
+    control_middle.caption(f"Target retirement · {target_year}")
+    control_right.caption(f"{len(frame)} year view")
+    metric_column = metric_options[selected_metric]
+    invalid_income = [
+        row
+        for row in plan["payload"]["income"]
+        if row.get("end_year") is not None
+        and int(row["end_year"]) < int(plan["payload"]["assumptions"]["start_year"])
+    ]
+    if invalid_income:
+        st.warning(
+            "One or more income sources end before this plan begins, so they contribute $0. "
+            "Open Edit plan inputs → Income & Benefits and correct the timing."
+        )
     metrics = st.columns(3)
     metrics[0].metric("Starting net worth", _money(float(frame.iloc[0]["Net worth"])))
     metrics[1].metric("At target year", _money(float(target_row.iloc[0]["Net worth"])))
@@ -320,20 +635,77 @@ def _render_projection(plan: dict, frame: pd.DataFrame) -> None:
     chart.add_trace(
         go.Scatter(
             x=frame["Year"],
-            y=frame["Net worth"],
+            y=frame[metric_column],
             mode="lines",
-            name=plan["name"],
+            name=selected_metric,
             line_color=PRIMARY,
+            customdata=frame[["Age"]],
+            hovertemplate=(
+                "Year %{x}<br>Age %{customdata[0]}<br>"
+                + selected_metric
+                + " $%{y:,.0f}<extra></extra>"
+            ),
         )
     )
     chart.add_vline(x=target_year, line_dash="dot", line_color=PRIMARY_LIGHT)
     style_figure(chart, height=430)
-    chart.update_layout(yaxis_title="Net worth")
+    chart.update_layout(
+        yaxis_title=selected_metric,
+        hovermode="x unified",
+        showlegend=False,
+    )
     st.plotly_chart(chart, use_container_width=True)
     st.caption(
         f"Deterministic {len(frame)}-year projection · "
         f"{float(plan['payload']['assumptions']['spending_inflation']):.1%} spending inflation"
     )
+
+
+def _render_plan_sections(plan: dict) -> None:
+    payload = plan["payload"]
+    st.markdown("### Plan timeline")
+    profile = payload["profile"]
+    milestone_cols = st.columns(3)
+    milestone_cols[0].metric("Plan starts", payload["assumptions"]["start_year"])
+    milestone_cols[1].metric("Retirement", profile.get("target_retire_year") or "Not set")
+    dob = profile.get("date_of_birth")
+    if dob:
+        life_year = date.fromisoformat(dob).year + 95
+    else:
+        life_year = "Not set"
+    milestone_cols[2].metric("Planning horizon", life_year)
+
+    st.markdown("### Plan inputs")
+    left, right = st.columns(2)
+    with left:
+        with st.container(border=True):
+            st.markdown("#### Accounts")
+            total = sum(float(row.get("current_balance") or 0) for row in payload["accounts"])
+            st.metric("Invested and saved", _money(total))
+            if payload["accounts"]:
+                st.caption(" · ".join(row.get("account_type", "Account") for row in payload["accounts"]))
+            else:
+                st.caption("No accounts configured")
+        with st.container(border=True):
+            st.markdown("#### Expenses")
+            monthly = sum(float(row.get("monthly_amount") or 0) for row in payload["spending"])
+            st.metric("Normal monthly spending", _money(monthly))
+            st.caption(f"{len(payload['spending'])} spending categories")
+    with right:
+        with st.container(border=True):
+            st.markdown("#### Income")
+            annual = sum(float(row.get("annual_amount") or 0) for row in payload["income"])
+            st.metric("Annual starting income", _money(annual))
+            st.caption(f"{len(payload['income'])} income sources")
+        with st.container(border=True):
+            st.markdown("#### Benefits")
+            benefit_names = [row.get("benefit_type", "Benefit") for row in payload["benefits"]]
+            st.metric("Benefit elections", len(benefit_names))
+            st.caption(" · ".join(benefit_names) if benefit_names else "No benefits configured")
+
+    if st.button("Edit plan inputs", type="primary", key=f"edit_plan_{plan['id']}"):
+        st.session_state.planning_edit_mode = True
+        st.rerun()
 
 
 def _render_compare(plans: list[dict], active_plan: dict) -> None:
@@ -432,14 +804,27 @@ def _render_settings(conn, user_id: int, plan: dict) -> None:
         st.warning("Archived plans are hidden from the active workspace but their revisions remain stored.")
         if st.button("Archive this plan", key=f"archive_{plan['id']}"):
             archive_plan(conn, user_id, plan["id"])
+            st.session_state.planning_workspace_plan_id = None
+            st.rerun()
+
+    st.divider()
+    st.subheader("Danger zone")
+    st.error("Permanently deleting a plan also deletes every saved revision. It cannot be undone.")
+    with st.form(f"delete_plan_{plan['id']}"):
+        confirmation = st.text_input(
+            f"Type {plan['name']} to confirm deletion",
+        )
+        if st.form_submit_button(
+            "Permanently delete plan",
+            disabled=confirmation != plan["name"],
+        ):
+            delete_plan(conn, user_id, plan["id"])
+            st.session_state.planning_workspace_plan_id = None
+            st.session_state.planning_edit_mode = False
             st.rerun()
 
 
 def render() -> None:
-    page_header(
-        "Plans",
-        "Build independent Canadian financial plans, inspect the cash flow, and compare possible paths.",
-    )
     user = st.session_state.get("user")
     if not user:
         st.info("Log in to build plans.")
@@ -448,39 +833,81 @@ def render() -> None:
     conn = get_connection()
     try:
         plans = list_plans(conn, user_id)
-        with st.expander("Create a plan", expanded=not plans):
-            with st.form("create_planning_plan"):
-                name = st.text_input("Plan name", value="My Plan")
-                source = st.radio(
-                    "Starting point",
-                    ["Current finances snapshot", "Blank plan"],
-                    horizontal=True,
-                )
-                if st.form_submit_button("Create plan", type="primary"):
-                    create_plan(
-                        conn,
-                        user_id,
-                        name,
-                        from_current_finances=source == "Current finances snapshot",
-                    )
-                    st.success("Plan created.")
-                    st.rerun()
+        requested_id = st.session_state.get("planning_workspace_plan_id")
+        active = next((plan for plan in plans if plan["id"] == requested_id), None)
 
-        if not plans:
-            st.info("Create your first plan to begin.")
+        if active is None:
+            page_header(
+                "Plans",
+                "Your current position stays separate from the futures you want to explore.",
+            )
+            create_col, mode_col = st.columns([1, 2])
+            with create_col:
+                with st.popover("New plan", use_container_width=True):
+                    with st.form("create_planning_plan"):
+                        name = st.text_input("Plan name", value="My Plan")
+                        source = st.radio(
+                            "Starting point",
+                            ["Current finances snapshot", "Blank plan"],
+                        )
+                        if st.form_submit_button("Create plan", type="primary"):
+                            created = create_plan(
+                                conn,
+                                user_id,
+                                name,
+                                from_current_finances=source == "Current finances snapshot",
+                            )
+                            st.session_state.planning_workspace_plan_id = created["id"]
+                            st.session_state.planning_edit_mode = source == "Blank plan"
+                            st.rerun()
+            with mode_col:
+                st.caption("Create independent plans, duplicate alternatives, and compare outcomes.")
+            if not plans:
+                st.info("Create your first plan from current finances or begin with a blank plan.")
+                return
+            _render_plan_cards(conn, user_id, plans)
             return
 
-        _render_plan_cards(conn, user_id, plans)
-        active = next((plan for plan in plans if plan["is_active"]), plans[0])
-        st.divider()
-        st.markdown(f"## {active['name']}")
-        tabs = st.tabs(["Projection", "Setup", "Cash Flow", "Tax & Benefits", "Compare", "Settings"])
+        if st.session_state.get("planning_edit_mode", False):
+            header_left, header_right = st.columns([4, 1])
+            header_left.markdown(f"## Build {active['name']}")
+            header_left.caption("Work through each section. The chart updates from saved revisions.")
+            if header_right.button("Back to plan", use_container_width=True):
+                st.session_state.planning_edit_mode = False
+                st.rerun()
+            preview, builder = st.columns([1.05, 1.4])
+            with preview:
+                st.markdown("### Live projection")
+                _render_projection(active, _projection_frame(active))
+            with builder:
+                _render_setup(conn, user_id, active)
+            return
+
+        toolbar_back, toolbar_plan, toolbar_meta = st.columns([0.8, 2.2, 1])
+        if toolbar_back.button("← All plans", use_container_width=True):
+            st.session_state.planning_workspace_plan_id = None
+            st.rerun()
+        selected_name = toolbar_plan.selectbox(
+            "Active plan",
+            [plan["name"] for plan in plans],
+            index=[plan["id"] for plan in plans].index(active["id"]),
+            label_visibility="collapsed",
+        )
+        selected_plan = next(plan for plan in plans if plan["name"] == selected_name)
+        if selected_plan["id"] != active["id"]:
+            set_active_plan(conn, user_id, selected_plan["id"])
+            st.session_state.planning_workspace_plan_id = selected_plan["id"]
+            st.rerun()
+        toolbar_meta.caption(f"Revision {active['revision_number']} · Deterministic")
+
+        st.markdown(f"# {active['name']}")
+        tabs = st.tabs(["Plan", "Cash Flow", "Tax Analytics", "Compare", "Plan Settings"])
         frame = _projection_frame(active)
         with tabs[0]:
             _render_projection(active, frame)
+            st.divider()
+            _render_plan_sections(active)
         with tabs[1]:
-            _render_setup(conn, user_id, active)
-        with tabs[2]:
             if frame.empty:
                 st.info("Complete setup to view cash flow.")
             else:
@@ -502,7 +929,7 @@ def render() -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
-        with tabs[3]:
+        with tabs[2]:
             if frame.empty:
                 st.info("Complete setup to view taxes and benefits.")
             else:
@@ -527,9 +954,9 @@ def render() -> None:
                 )
                 if frame["Fallback"].any():
                     st.info("Years without verified CRA parameters use the documented 2026 fallback.")
-        with tabs[4]:
+        with tabs[3]:
             _render_compare(plans, active)
-        with tabs[5]:
+        with tabs[4]:
             _render_settings(conn, user_id, active)
     finally:
         conn.close()

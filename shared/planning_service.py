@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import date
 import json
 import sqlite3
+from statistics import mean, median
 from uuid import uuid4
 
 from fire_engine.engine.projection import project_household
@@ -24,7 +25,7 @@ from shared.utils import utc_now_iso
 
 
 PLAN_PAYLOAD_VERSION = 1
-REFRESHABLE_SECTIONS = {"profile", "income", "spending", "accounts", "benefits", "room"}
+REFRESHABLE_SECTIONS = {"profile", "income", "spending", "accounts", "benefits"}
 
 
 def blank_plan_payload() -> dict:
@@ -53,6 +54,53 @@ def blank_plan_payload() -> dict:
         },
         "provenance": {"source": "manual", "refreshed_at": None, "sections": {}},
     }
+
+
+def spending_suggestions(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    months = [
+        row["month"]
+        for row in conn.execute(
+            """
+            SELECT DISTINCT substr(date, 1, 7) AS month
+            FROM transactions
+            WHERE user_id = ? AND is_excluded = 0
+            ORDER BY month
+            """,
+            (user_id,),
+        ).fetchall()
+        if row["month"]
+    ]
+    if not months:
+        return []
+    rows = conn.execute(
+        """
+        SELECT
+            COALESCE(category, 'Uncategorized') AS category,
+            substr(date, 1, 7) AS month,
+            SUM(ABS(amount)) AS total
+        FROM transactions
+        WHERE user_id = ?
+          AND is_excluded = 0
+          AND amount < 0
+          AND COALESCE(transaction_type, 'expense') = 'expense'
+          AND COALESCE(category, 'Uncategorized') NOT IN ('Transfer', 'Income')
+        GROUP BY COALESCE(category, 'Uncategorized'), substr(date, 1, 7)
+        ORDER BY category, month
+        """,
+        (user_id,),
+    ).fetchall()
+    totals: dict[str, dict[str, float]] = {}
+    for row in rows:
+        totals.setdefault(row["category"], {})[row["month"]] = float(row["total"] or 0)
+    return [
+        {
+            "category": category,
+            "mean_monthly": round(mean([by_month.get(month, 0.0) for month in months]), 2),
+            "median_monthly": round(median([by_month.get(month, 0.0) for month in months]), 2),
+            "months": len(months),
+        }
+        for category, by_month in sorted(totals.items())
+    ]
 
 
 def snapshot_current_finances(conn: sqlite3.Connection, user_id: int) -> dict:
@@ -159,7 +207,21 @@ def create_plan(
         """,
         (plan_id, user_id, name.strip() or "My Plan", 0 if has_active else 1, now, now),
     )
-    payload = snapshot_current_finances(conn, user_id) if from_current_finances else blank_plan_payload()
+    if from_current_finances:
+        from bridge.data_bridge import sync_fire_defaults
+
+        sync_fire_defaults(conn, user_id)
+        payload = snapshot_current_finances(conn, user_id)
+    else:
+        payload = blank_plan_payload()
+        current_profile = get_or_create_fire_profile(conn, user_id)
+        payload["profile"].update(
+            {
+                key: current_profile.get(key)
+                for key in payload["profile"]
+                if current_profile.get(key) is not None
+            }
+        )
     save_plan_revision(conn, user_id, plan_id, payload, reason="created")
     return get_plan(conn, user_id, plan_id)
 
@@ -242,6 +304,33 @@ def archive_plan(conn: sqlite3.Connection, user_id: int, plan_id: str) -> None:
     conn.commit()
 
 
+def delete_plan(conn: sqlite3.Connection, user_id: int, plan_id: str) -> None:
+    plan = get_plan(conn, user_id, plan_id)
+    cursor = conn.execute(
+        "DELETE FROM planning_plans WHERE id = ? AND user_id = ?",
+        (plan_id, user_id),
+    )
+    if cursor.rowcount == 0:
+        raise ValueError("Plan not found.")
+    if plan["is_active"]:
+        replacement = conn.execute(
+            """
+            SELECT id
+            FROM planning_plans
+            WHERE user_id = ? AND status = 'active'
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+        if replacement:
+            conn.execute(
+                "UPDATE planning_plans SET is_active = 1 WHERE id = ?",
+                (replacement["id"],),
+            )
+    conn.commit()
+
+
 def refresh_plan_sections(
     conn: sqlite3.Connection,
     user_id: int,
@@ -252,6 +341,10 @@ def refresh_plan_sections(
     if invalid:
         raise ValueError(f"Unknown refresh sections: {', '.join(sorted(invalid))}")
     plan = get_plan(conn, user_id, plan_id)
+    if sections & {"income", "spending"}:
+        from bridge.data_bridge import sync_fire_defaults
+
+        sync_fire_defaults(conn, user_id)
     refreshed = snapshot_current_finances(conn, user_id)
     payload = deepcopy(plan["payload"])
     now = utc_now_iso()
@@ -294,6 +387,7 @@ def plan_payload_to_household(payload: dict) -> Household | None:
             opened_date=date.fromisoformat(row["opened_date"]) if row.get("opened_date") else None,
             institution=row.get("institution"),
             beneficiary_type=row.get("beneficiary_type"),
+            annual_return=float(row.get("annual_return") or 0.05),
         )
         for row in payload["accounts"]
     ]
